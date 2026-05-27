@@ -9,10 +9,18 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+
+import com.teachersdrawer.backend.global.security.JwtFilter;
+
+import lombok.RequiredArgsConstructor;
 
 @Configuration
 @EnableWebSecurity
+@RequiredArgsConstructor
 public class SecurityConfig {
+	// JwtFilter를 주입 자동 생성자 생성
+	private final JwtFilter jwtFilter;
 	
 	@Bean
 	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
@@ -37,7 +45,8 @@ public class SecurityConfig {
 				// 로그인 회원가입은 토큰 없이 누구나 가능하게 끔
 				.requestMatchers("/api/auth/**").permitAll()
 				// 나머지 요청은 인증이 필요하게
-				.anyRequest().authenticated());
+				.anyRequest().authenticated())
+		.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 		
 		return http.build();
 	}

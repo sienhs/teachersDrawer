@@ -22,11 +22,11 @@ spring:
       max-file-size: 50MB
       max-request-size: 50MB
 
-server:
+  server:
   port: 8080
 
 jwt:
-  secret: 나중에_바꿔야_하는_임시_시크릿_키_최소_256비트_이상이어야함
+  secret: teachers-drawer-jwt-secret-key-must-be-at-least-256-bits-long-enough
   access-token-expiration: 900000
   refresh-token-expiration: 604800000
 

@@ -25,6 +25,10 @@ public class JwtUtil {
             @Value("${jwt.refresh-token-expiration}") long refreshTokenExpiration
     ) {
         // 문자열 시크릿키 → HMAC-SHA 암호화 키 객체로 변환
+    	// HS256
+    	// JWT를 생성할떄 HMAC에다 SHA-256을 끼얹은 HS256을 많이들 사용하는데
+    	// 이는 그대로 사용해도 크게 무리가 없다.
+    	// https://nhahan.tistory.com/128
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
