@@ -12,19 +12,17 @@ spring:
     open-in-view: false
     show-sql: true
     hibernate:
-      ddl-auto: create
+      ddl-auto: create	
     properties:
       hibernate:
         format_sql: true
-
+        dialect: org.hibernate.dialect.PostgreSQLDialect
   servlet:
     multipart:
       max-file-size: 50MB
       max-request-size: 50MB
-
-  server:
-  port: 8080
-
+server:
+    port: 8080
 jwt:
   secret: teachers-drawer-jwt-secret-key-must-be-at-least-256-bits-long-enough
   access-token-expiration: 900000

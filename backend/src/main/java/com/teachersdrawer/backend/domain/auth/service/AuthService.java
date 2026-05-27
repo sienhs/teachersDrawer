@@ -20,25 +20,12 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class AuthService implements UserDetailsService {
+public class AuthService {
 	// SpringSecurity가 유저 정보 조회할 때 이 구현체를 사용
 	private final UserRepository userRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtUtil jwtUtil;
-	
-	// Spring Security가 내부적으로 호출하는 메서드
-	// JwtFilter가 DB유저 조회할 때 여기로 옴
-	@Override
-	public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-		return userRepository.findByEmail(email)
-				.map(user -> org.springframework.security.core.userdetails.User
-						.withUsername(user.getEmail())
-						.password(user.getPassword())
-						.roles("USER")
-						.build()
-				).orElseThrow(() -> new UsernameNotFoundException("유저를 찾을 수 없습니다: " + email));
-	}
-	
+
 	
 	// 로그인
 	// readOnly = true는 SELECT만 하는 트랜잭션으로 약간의 성능 최적화를 기대

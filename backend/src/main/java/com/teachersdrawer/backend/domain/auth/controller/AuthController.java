@@ -1,6 +1,7 @@
 package com.teachersdrawer.backend.domain.auth.controller;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -19,6 +20,7 @@ import lombok.RequiredArgsConstructor;
 public class AuthController {
 	private final AuthService authService;
 	
+	@PostMapping("/login")
 	public ResponseEntity<ApiResponse<LoginResponse>> login(
 			// 요청 바디의 json을 loginRequest 객체로 반환함
 			// 그다음 @Valid가 loginRequest의 @Email, @NotBlank 검증을 실행함
