@@ -10,6 +10,7 @@ public class LoginResponse {
 	// accessToken만 바디에 담음
 	// refresh는 보안성을 위해 httpOnly Cookie로 별도로 전달
 	private String accessToken;
+	private String refreshToken;
 	private String name;
 	private String email;
 }
