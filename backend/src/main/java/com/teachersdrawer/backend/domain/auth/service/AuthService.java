@@ -115,5 +115,10 @@ public class AuthService {
 		log.info("로그아웃: {}", email);
 	}
 	
+	
+	@Transactional
+	public void signup(SignupRequest request) {
+		
+	}
 
 }
