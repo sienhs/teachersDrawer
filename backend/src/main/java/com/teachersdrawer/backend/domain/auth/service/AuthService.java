@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.teachersdrawer.backend.domain.auth.dto.LoginRequest;
 import com.teachersdrawer.backend.domain.auth.dto.LoginResponse;
+import com.teachersdrawer.backend.domain.auth.dto.SignupRequest;
 import com.teachersdrawer.backend.domain.auth.entity.RefreshToken;
 import com.teachersdrawer.backend.domain.auth.entity.User;
 import com.teachersdrawer.backend.domain.auth.repository.RefreshTokenRepository;
@@ -118,6 +119,16 @@ public class AuthService {
 	
 	@Transactional
 	public void signup(SignupRequest request) {
+		if(userRepository.existsByEmail(request.getEmail())) {
+			throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
+		}
+		
+		userRepository.save(User.builder()
+				.email(request.getEmail())
+				.password(passwordEncoder.encode(request.getPassword()))
+				.name(request.getName())
+				.build());
+		log.info("회원가입 성공: {}", request.getEmail());
 		
 	}
 

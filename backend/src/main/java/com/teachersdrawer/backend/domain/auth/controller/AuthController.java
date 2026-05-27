@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.teachersdrawer.backend.domain.auth.dto.LoginRequest;
 import com.teachersdrawer.backend.domain.auth.dto.LoginResponse;
+import com.teachersdrawer.backend.domain.auth.dto.SignupRequest;
 import com.teachersdrawer.backend.domain.auth.service.AuthService;
 import com.teachersdrawer.backend.global.response.ApiResponse;
 
@@ -99,6 +100,14 @@ public class AuthController {
 		response.addCookie(cookie);
 		
 		return ResponseEntity.ok(ApiResponse.success("로그아웃 성공"));	
+	}
+	
+	@PostMapping("/signup")
+	public ResponseEntity<ApiResponse<Void>> signup(
+			@RequestBody @Valid SignupRequest request
+			){
+		authService.signup(request);
+		return ResponseEntity.ok(ApiResponse.success("회원가입 성공"));
 	}
 }
 
