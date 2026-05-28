@@ -71,6 +71,7 @@ public class SecurityConfig {
 		.authorizeHttpRequests(auth -> auth
 				// 로그인 회원가입은 토큰 없이 누구나 가능하게 끔
 				.requestMatchers("/api/auth/**").permitAll()
+				.requestMatchers("/api/schools/**").permitAll() // api 넣으면서 같이 추가
 				// 나머지 요청은 인증이 필요하게
 				.anyRequest().authenticated())
 		.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
