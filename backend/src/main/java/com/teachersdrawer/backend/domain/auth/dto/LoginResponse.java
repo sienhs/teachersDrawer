@@ -13,4 +13,7 @@ public class LoginResponse {
 	private String refreshToken;
 	private String name;
 	private String email;
+	private String schoolName; // 학교이름
+	private String schoolType; // 초 중 고
+	
 }

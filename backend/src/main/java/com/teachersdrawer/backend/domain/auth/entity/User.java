@@ -37,12 +37,23 @@ public class User {
 	@Column(nullable = false, unique = true)
 	private String email;
 	
+	
 	// BCrypt로 암호화 된 값이 저장됨. 평문 x
 	@Column(nullable = false)
 	private String password;
 	
 	@Column(nullable = false)
 	private String name;
+	
+	// 학교 정보 (선택 입력 - nullable)
+	@Column
+	private String schoolCode;
+
+	@Column
+	private String schoolName;
+
+	@Column
+	private String schoolType;
 	
 	// updateable = false는 최초 생성 후 변경이 안되는 항목임을 선언
 	@CreatedDate

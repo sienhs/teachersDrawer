@@ -22,4 +22,9 @@ public class SignupRequest {
 	
 	@NotBlank(message = "이름을 입력해주세요")
 	private String name;
+	
+	// 학교 정보 (선택 입력 - 나중에 등록 가능 nullable)
+	private String schoolCode;
+	private String schoolName;
+	private String schoolType;
 }

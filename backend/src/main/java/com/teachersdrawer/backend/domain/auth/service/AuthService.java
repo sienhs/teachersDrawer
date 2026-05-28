@@ -88,6 +88,8 @@ public class AuthService {
 				.name(user.getName())
 				.email(user.getEmail())
 				.refreshToken(refreshToken)
+				.schoolName(user.getSchoolName())
+		        .schoolType(user.getSchoolType())
 				.build();
 	}
 	
@@ -116,7 +118,7 @@ public class AuthService {
 		log.info("로그아웃: {}", email);
 	}
 	
-	
+	// 회원가입 부분
 	@Transactional
 	public void signup(SignupRequest request) {
 		if(userRepository.existsByEmail(request.getEmail())) {
@@ -127,6 +129,9 @@ public class AuthService {
 				.email(request.getEmail())
 				.password(passwordEncoder.encode(request.getPassword()))
 				.name(request.getName())
+				.schoolCode(request.getSchoolCode())
+				.schoolName(request.getSchoolName())
+				.schoolType(request.getSchoolType())
 				.build());
 		log.info("회원가입 성공: {}", request.getEmail());
 		
