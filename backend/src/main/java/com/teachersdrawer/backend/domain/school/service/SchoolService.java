@@ -13,7 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class SchoolService { // 유치원과 초중고를 같이 검색해서 합쳐서 반환
+public class SchoolService { // 합쳐서 검색 -> 분할 했음. 수정완
 	private final NeisClient neisClient;
 	private final KinderClient kinderClient;
 	

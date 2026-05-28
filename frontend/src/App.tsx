@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { reissue } from './api/auth';
 import useAuthStore from './store/authStore';
@@ -10,10 +10,15 @@ import HomePage from './pages/home/HomePage';
 
 function App() {
   const [isRestoring, setIsRestoring] = useState(true);
-  const { setAuth, clearAuth } = useAuthStore();
+  const hasRestored = useRef(false);
 
   useEffect(() => {
+    // StrictMode 이중 실행 및 의존성 배열 문제 방지
+    if (hasRestored.current) return;
+    hasRestored.current = true;
+
     const restoreAuth = async () => {
+      const { setAuth, clearAuth } = useAuthStore.getState();
       try {
         const accessToken = await reissue();
         const saved = localStorage.getItem('auth_user');
@@ -30,7 +35,7 @@ function App() {
     };
 
     restoreAuth();
-  }, [setAuth, clearAuth]);
+  }, []);
 
   if (isRestoring) {
     return (

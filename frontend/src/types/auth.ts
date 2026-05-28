@@ -18,6 +18,9 @@ export interface SignupRequest {
   email: string;
   password: string;
   name: string;
+  schoolCode: string;
+  schoolName: string;
+  schoolType: string;
 }
 
 export interface ApiResponse<T> {
