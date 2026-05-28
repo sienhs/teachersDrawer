@@ -13,3 +13,11 @@ public class BackendApplication {
 	}
 
 }
+/*
+ * 
+# 환경변수로 오버라이드
+CORS_ALLOWED_ORIGINS=https://teachersdrawer.com ./gradlew bootRun
+
+# Docker 실행 시
+docker run -e CORS_ALLOWED_ORIGINS=https://teachersdrawer.com ...
+ */

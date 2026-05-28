@@ -33,3 +33,5 @@ minio:
   access-key: minioadmin
   secret-key: minioadmin123
   bucket-name: hwp-files
+cors:
+  allowed-origins: http://localhost:5173

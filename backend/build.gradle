@@ -11,6 +11,7 @@ sourceSets {
 }
 
 tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs << '-parameters'
 	options.generatedSourceOutputDirectory = generated
 }
 
