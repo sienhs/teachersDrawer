@@ -1,6 +1,7 @@
 package com.teachersdrawer.backend.domain.school.service;
 
 import java.io.InputStream;
+import java.util.Comparator;
 import java.util.List;
 
 import org.springframework.core.io.ClassPathResource;
@@ -48,6 +49,9 @@ public class RegionData {
                 .filter(r -> r.getSidoCode().equals(sidoCode))
                 .findFirst()
                 .map(RegionInfo::getSigunguList)
+                .map(list -> list.stream()
+                		.sorted(Comparator.comparing(RegionInfo.Sigungu::getName))
+                		.toList())
                 .orElse(List.of());
     }
 	

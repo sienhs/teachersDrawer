@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import type { AxiosError } from 'axios';
 import { signup } from '../../api/auth';
 import { getRegions, getSigungu, searchSchools, searchKindergartens } from '../../api/school';
@@ -57,6 +57,9 @@ export default function SignupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const navigate = useNavigate();
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  if (isAuthenticated) return <Navigate to="/" replace />;
 
   // 각 섹션 표시 여부
   const showSido = schoolType === 'KINDERGARTEN';
