@@ -15,11 +15,12 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class SchoolService { // 유치원과 초중고를 같이 검색해서 합쳐서 반환
 	private final NeisClient neisClient;
+	private final KinderClient kinderClient;
 	
-	public List<SchoolInfo> search(String name){
-		List<SchoolInfo> result = new ArrayList<>();
-		result.addAll(neisClient.searchKindergartens(name));
-		result.addAll(neisClient.searchSchools(name));
-		return result;
+	public List<SchoolInfo> searchSchools(String name){
+		return neisClient.searchSchools(name);
+	}
+	public List<SchoolInfo> searchKindergartens(String sidoCode, String sggCode, String name){
+		return kinderClient.search(sidoCode, sggCode, name);
 	}
 }

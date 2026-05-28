@@ -38,3 +38,6 @@ cors:
 neis:
   api-key: a29767409ba0402c88f9dfa83ef66a3b
   base-url: https://open.neis.go.kr/hub
+kinder:
+  api-key: 4d862da49d1840deadb56af202d04700
+  base-url: https://e-childschoolinfo.moe.go.kr/api/notice
