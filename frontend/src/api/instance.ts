@@ -29,7 +29,10 @@ instance.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config as RetryableRequest;
-
+    // reissue 자체가 실패하면 재시도 없이 바로 reject
+    if (originalRequest.url?.includes('/api/auth/reissue')) {
+      return Promise.reject(error);
+    }
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
 

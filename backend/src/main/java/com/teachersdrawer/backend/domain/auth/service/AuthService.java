@@ -25,6 +25,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class AuthService {
 	// SpringSecurity가 유저 정보 조회할 때 이 구현체를 사용
 	private final UserRepository userRepository;

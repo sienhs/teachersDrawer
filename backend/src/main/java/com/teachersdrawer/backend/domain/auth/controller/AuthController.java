@@ -14,6 +14,8 @@ import com.teachersdrawer.backend.domain.auth.dto.LoginRequest;
 import com.teachersdrawer.backend.domain.auth.dto.LoginResponse;
 import com.teachersdrawer.backend.domain.auth.dto.SignupRequest;
 import com.teachersdrawer.backend.domain.auth.service.AuthService;
+import com.teachersdrawer.backend.global.exception.BusinessException;
+import com.teachersdrawer.backend.global.exception.ErrorCode;
 import com.teachersdrawer.backend.global.response.ApiResponse;
 
 import jakarta.servlet.http.Cookie;
@@ -66,13 +68,13 @@ public class AuthController {
 	// Cookie에서 Refresh token 추출 헬퍼
 	private String extractRefreshTokenFromCookie(HttpServletRequest request) {
 		if(request.getCookies() == null) {
-			throw new IllegalArgumentException("쿠키가 없습니다.");
+			throw new BusinessException(ErrorCode.INVALID_TOKEN);
 		}
 		return Arrays.stream(request.getCookies())
 				.filter(c -> REFRESH_TOKEN_COOKIE.equals(c.getName()))
 				.map(Cookie::getValue)
 				.findFirst()
-				.orElseThrow(() -> new IllegalArgumentException("Refresh Token 쿠키가 없습니다."));
+				.orElseThrow(() -> new BusinessException(ErrorCode.INVALID_TOKEN));
 	}
 	@PostMapping("/reissue")
 	public ResponseEntity<ApiResponse<String>> reissue(HttpServletRequest request){
