@@ -38,7 +38,11 @@ public enum ErrorCode {
 	ARCHIVED_CLASSROOM(HttpStatus.BAD_REQUEST, "보관된 반은 수정할 수 없습니다."),
 
 	// Child
-	CHILD_NOT_FOUND(HttpStatus.NOT_FOUND, "아이를 찾을 수 없습니다.");
+	CHILD_NOT_FOUND(HttpStatus.NOT_FOUND, "아이를 찾을 수 없습니다."),
+
+	// Enrollment
+	ENROLLMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "반배정을 찾을 수 없습니다."),
+	DUPLICATE_ENROLLMENT(HttpStatus.CONFLICT, "이미 이 반에 배정되어 있습니다.");
     /**
      * HTTP 응답 상태코드
      *  auth(UNAUTHORIZED) = 401
