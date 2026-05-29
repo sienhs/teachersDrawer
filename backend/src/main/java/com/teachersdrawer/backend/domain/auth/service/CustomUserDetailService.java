@@ -6,6 +6,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import com.teachersdrawer.backend.domain.auth.repository.UserRepository;
+import com.teachersdrawer.backend.global.security.CustomUserDetails;
 
 import lombok.RequiredArgsConstructor;
 
@@ -21,12 +22,8 @@ public class CustomUserDetailService implements UserDetailsService {
 	@Override
 	public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
 		return userRepository.findByEmail(email)
-				.map(user -> org.springframework.security.core.userdetails.User
-						.withUsername(user.getEmail())
-						.password(user.getPassword())
-						.roles("USER")
-						.build()
-				).orElseThrow(() -> new UsernameNotFoundException("유저를 찾을 수 없습니다: " + email));
+				.map(CustomUserDetails::new) // 내장 user 대신 CustomUserDetails를 반환하게끔 수정.
+				.orElseThrow(() -> new UsernameNotFoundException("유저를 찾을 수 없습니다: " + email));
 	}
 	
 }

@@ -70,4 +70,16 @@ public class Child {
 	
 	@LastModifiedDate
 	private LocalDateTime updatedAt;
+	
+	
+	// Service부분에서 사용할 거 Setter열어두면 안되니까 따로 만듬.
+	public void update(String name, LocalDate birthDate, String gender, String memo, String status) {
+	    this.name = name;
+	    this.birthDate = birthDate;
+	    this.gender = gender;
+	    this.memo = memo;
+	    if (status != null) {
+	        this.status = status;
+	    }
+	}
 }

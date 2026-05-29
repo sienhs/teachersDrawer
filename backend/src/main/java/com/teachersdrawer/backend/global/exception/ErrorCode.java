@@ -28,12 +28,17 @@ public enum ErrorCode {
 
     // File
     FILE_UPLOAD_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 업로드에 실패했습니다."),
-    INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다.");
+    INVALID_FILE_TYPE(HttpStatus.BAD_REQUEST, "허용되지 않는 파일 형식입니다."),
 	
-	// User 곧 있으면 필요할 듯
+	// User
+	FORBIDDEN(HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
 	
-	// Child ? 이건 어떻게 관리해야할지도 보안이 좀 확실해야해서
-	
+	// Classroom
+	CLASSROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "반을 찾을 수 없습니다."),
+	ARCHIVED_CLASSROOM(HttpStatus.BAD_REQUEST, "보관된 반은 수정할 수 없습니다."),
+
+	// Child
+	CHILD_NOT_FOUND(HttpStatus.NOT_FOUND, "아이를 찾을 수 없습니다.");
     /**
      * HTTP 응답 상태코드
      *  auth(UNAUTHORIZED) = 401
