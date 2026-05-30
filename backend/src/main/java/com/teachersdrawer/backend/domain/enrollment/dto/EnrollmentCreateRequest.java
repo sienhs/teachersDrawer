@@ -6,9 +6,9 @@ import lombok.Getter;
 @Getter
 public class EnrollmentCreateRequest {
 
-    @NotNull
+    @NotNull(message = "아이 ID를 입력해주세요.")
     private Long childId;
 
-    @NotNull
+    @NotNull(message = "반 ID를 입력해주세요.")
     private Long classroomId;
 }
