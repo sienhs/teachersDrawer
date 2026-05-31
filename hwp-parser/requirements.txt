@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pyhwp
+six
+beautifulsoup4
+lxml
+pytest

@@ -42,7 +42,13 @@ public enum ErrorCode {
 
 	// Enrollment
 	ENROLLMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "반배정을 찾을 수 없습니다."),
-	DUPLICATE_ENROLLMENT(HttpStatus.CONFLICT, "이미 이 반에 배정되어 있습니다.");
+	DUPLICATE_ENROLLMENT(HttpStatus.CONFLICT, "이미 이 반에 배정되어 있습니다."),
+
+	// ActivityPlan
+	ACTIVITY_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "활동계획안을 찾을 수 없습니다."),
+	HWP_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "HWP 파일 분석에 실패했습니다."),
+	INVALID_FILE_FORMAT(HttpStatus.BAD_REQUEST, "HWP 또는 HWPX 파일만 업로드 가능합니다."),
+	FILE_STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장 중 오류가 발생했습니다.");
     /**
      * HTTP 응답 상태코드
      *  auth(UNAUTHORIZED) = 401

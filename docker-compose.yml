@@ -29,6 +29,14 @@ services:
     networks:
       - drawer-network
 
+  hwp-parser:
+    build: ./hwp-parser
+    container_name: teachers-drawer-hwp-parser
+    ports:
+      - "8001:8001"
+    networks:
+      - drawer-network
+
 volumes:
   postgres_data:
   minio_data:

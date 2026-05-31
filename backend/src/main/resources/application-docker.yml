@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/teachers_drawer
+
+minio:
+  endpoint: http://minio:9000
+
+hwp:
+  parser:
+    base-url: http://hwp-parser:8001

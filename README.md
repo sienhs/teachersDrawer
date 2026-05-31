@@ -176,6 +176,7 @@ docker-compose up -d
 ```
 - PostgreSQL: `localhost:5432`
 - MinIO API: `localhost:9000`, Console: `localhost:9001`
+- hwp-parser: `localhost:8001`
 
 ### 백엔드 실행
 ```bash
@@ -191,6 +192,39 @@ npm install
 npm run dev
 ```
 - Frontend: http://localhost:5173
+
+### hwp-parser 단독 실행 및 테스트
+
+#### hwp-parser만 빌드·실행
+```bash
+docker-compose up -d hwp-parser
+```
+
+#### 헬스체크
+```bash
+curl http://localhost:8001/health
+# {"status":"ok"}
+```
+
+#### HWP 파일 파싱 (curl)
+```bash
+# samples/hwp/ 에 HWP 파일 배치 후
+curl -X POST http://localhost:8001/parse \
+  -F "file=@samples/hwp/CASE_5_8.hwp"
+```
+
+#### 로컬 단위 테스트 (Docker 없이)
+```bash
+# Python 3.12 환경에서
+cd hwp-parser
+pip install -r requirements.txt
+
+# samples/hwp/ 에 CASE_5_8.hwp, CASE_5_26.hwp 배치 후
+pytest tests/ -v
+
+# HWP 파일 경로 별도 지정 시
+SAMPLES_DIR=/path/to/hwp pytest tests/ -v
+```
 
 ## 환경 설정 주의
 
