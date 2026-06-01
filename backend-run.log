@@ -3309,3 +3309,6 @@ Hibernate:
         activity_plans 
     where
         id=?
+2026-06-01T01:17:00.723+09:00  WARN 29428 --- [teachers-drawer] [l-1:housekeeper] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Failed to validate connection org.postgresql.jdbc.PgConnection@2e3dcd2 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-06-01T01:17:02.659+09:00  WARN 29428 --- [teachers-drawer] [l-1:housekeeper] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Failed to validate connection org.postgresql.jdbc.PgConnection@6996f003 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
+2026-06-01T01:17:04.661+09:00  WARN 29428 --- [teachers-drawer] [l-1:housekeeper] com.zaxxer.hikari.pool.PoolBase          : HikariPool-1 - Failed to validate connection org.postgresql.jdbc.PgConnection@6c1d8437 (This connection has been closed.). Possibly consider using a shorter maxLifetime value.
