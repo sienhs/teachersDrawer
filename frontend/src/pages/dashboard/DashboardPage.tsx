@@ -132,8 +132,17 @@ export default function DashboardPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-800">대시보드</h1>
-        {loading && <Spinner className="h-5 w-5" />}
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-bold text-gray-800">대시보드</h1>
+          {loading && <Spinner className="h-5 w-5" />}
+        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/activity-plans/new')}
+          className="rounded-xl bg-[#FF9F66] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f08c52]"
+        >
+          + 업로드하기
+        </button>
       </div>
 
       {/* 필터 바 */}
@@ -186,7 +195,7 @@ export default function DashboardPage() {
           </p>
           <button
             type="button"
-            onClick={() => navigate('/activity-plans')}
+            onClick={() => navigate('/activity-plans/new')}
             className="rounded-xl bg-[#FF9F66] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f08c52]"
           >
             업로드하기

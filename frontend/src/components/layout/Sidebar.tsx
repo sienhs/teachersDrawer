@@ -8,7 +8,7 @@ interface MenuItem {
 
 const MENU: MenuItem[] = [
   { to: '/dashboard', label: '대시보드', ready: true },
-  { to: '/activity-plans', label: '활동계획안', ready: false },
+  { to: '/activity-plans', label: '활동계획안', ready: true },
   { to: '/children', label: '아이 관리', ready: false },
   { to: '/classrooms', label: '반 관리', ready: false },
 ];

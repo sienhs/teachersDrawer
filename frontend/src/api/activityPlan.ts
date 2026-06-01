@@ -9,7 +9,18 @@ import type {
 export interface ActivityPlanListParams {
   classroomId?: number;
   from?: string; // yyyy-MM-dd
-  to?: string; // yyyy-MM-dd
+  to?: string;   // yyyy-MM-dd
+}
+
+// Content-Disposition 헤더에서 파일명 추출
+// filename*=UTF-8''... 우선, 없으면 filename="..." 폴백
+function extractFilename(header?: string): string {
+  if (!header) return 'file.hwp';
+  const starMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (starMatch) return decodeURIComponent(starMatch[1]);
+  const match = header.match(/filename="([^"]+)"/i);
+  if (match) return match[1];
+  return 'file.hwp';
 }
 
 export const activityPlanApi = {
@@ -23,7 +34,7 @@ export const activityPlanApi = {
       .get<ApiResponse<ActivityPlanDetail>>(`/api/activity-plans/${id}`)
       .then((r) => r.data.data),
 
-  // 업로드는 multipart/form-data
+  // 업로드는 multipart/form-data; 성공 시 ActivityPlanDetail (id 포함)
   upload: (file: File, classroomId?: number) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -40,16 +51,22 @@ export const activityPlanApi = {
   delete: (id: number) =>
     api.delete<ApiResponse<void>>(`/api/activity-plans/${id}`).then((r) => r.data.data),
 
-  // 원본 HWP 다운로드용 URL (실제 다운로드 트리거는 Step 3-B).
-  // 주의: 이 엔드포인트는 JWT 인증이 필요하므로 단순 링크 클릭만으로는
-  //       토큰이 실리지 않는다. 3-B에서 blob 다운로드로 처리 예정.
-  downloadUrl: (id: number) => `/api/activity-plans/${id}/file`,
+  // Authorization 헤더가 필요하므로 blob으로 받아 a 태그로 다운로드 트리거
+  downloadFile: async (id: number) => {
+    const response = await api.get(`/api/activity-plans/${id}/file`, {
+      responseType: 'blob',
+    });
+    const filename = extractFilename(
+      response.headers['content-disposition'] as string | undefined,
+    );
+    return { blob: response.data as Blob, filename };
+  },
 
-  // 아이별 몬테소리 누적 이력
+  // 아이별 몬테소리 누적 이력 (planDate 포함)
   listChildMontessori: (childId: number) =>
     api
       .get<ApiResponse<MontessoriHistoryItem[]>>(
-        `/api/activity-plans/children/${childId}/montessori`
+        `/api/activity-plans/children/${childId}/montessori`,
       )
       .then((r) => r.data.data),
 };

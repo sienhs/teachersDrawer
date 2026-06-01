@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import type { ActivityPlanDetail, SectionCategory } from '../../types/activityPlan';
@@ -30,6 +31,8 @@ function formatPlanDate(planDate?: string | null): string {
 }
 
 export default function ActivityDetailPanel({ detail, open, loading, onClose }: Props) {
+  const navigate = useNavigate();
+
   return (
     <div
       className={`absolute right-0 top-0 z-10 h-full w-[400px] max-w-[90vw] transform border-l border-orange-100 bg-white shadow-xl transition-transform duration-300 ${
@@ -118,11 +121,11 @@ export default function ActivityDetailPanel({ detail, open, loading, onClose }: 
             </section>
           </div>
 
-          {/* 하단: 상세 보기 (Step 3-B) */}
+          {/* 하단: 상세 보기 */}
           <div className="border-t border-gray-100 p-4">
             <button
               type="button"
-              onClick={() => alert('활동계획안 상세 페이지는 Step 3-B에서 구현 예정입니다.')}
+              onClick={() => navigate(`/activity-plans/${detail.id}`)}
               className="w-full rounded-xl bg-[#FF9F66] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#f08c52]"
             >
               상세 보기

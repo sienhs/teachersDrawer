@@ -8,6 +8,10 @@ import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
+import ActivityPlanListPage from './pages/activityPlan/ActivityPlanListPage';
+import ActivityPlanUploadPage from './pages/activityPlan/ActivityPlanUploadPage';
+import ActivityPlanDetailPage from './pages/activityPlan/ActivityPlanDetailPage';
+import ChildDetailPage from './pages/child/ChildDetailPage';
 import ComingSoonPage from './pages/placeholder/ComingSoonPage';
 
 function App() {
@@ -63,8 +67,16 @@ function App() {
         >
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          {/* Step 3-B에서 채워질 자리 */}
-          <Route path="/activity-plans" element={<ComingSoonPage title="활동계획안" />} />
+
+          {/* 활동계획안 */}
+          <Route path="/activity-plans" element={<ActivityPlanListPage />} />
+          <Route path="/activity-plans/new" element={<ActivityPlanUploadPage />} />
+          <Route path="/activity-plans/:planId" element={<ActivityPlanDetailPage />} />
+
+          {/* 아이 */}
+          <Route path="/children/:childId" element={<ChildDetailPage />} />
+
+          {/* 미구현 placeholder */}
           <Route path="/children" element={<ComingSoonPage title="아이 관리" />} />
           <Route path="/classrooms" element={<ComingSoonPage title="반 관리" />} />
         </Route>
