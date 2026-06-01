@@ -48,7 +48,9 @@ public enum ErrorCode {
 	ACTIVITY_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "활동계획안을 찾을 수 없습니다."),
 	HWP_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "HWP 파일 분석에 실패했습니다."),
 	INVALID_FILE_FORMAT(HttpStatus.BAD_REQUEST, "HWP 또는 HWPX 파일만 업로드 가능합니다."),
-	FILE_STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장 중 오류가 발생했습니다.");
+	FILE_STORAGE_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장 중 오류가 발생했습니다."),
+	PENDING_FILE_NOT_FOUND(HttpStatus.NOT_FOUND, "임시 파일을 찾을 수 없습니다. 다시 업로드해 주세요."),
+	INVALID_CONFIRM_ACTION(HttpStatus.BAD_REQUEST, "확정 요청의 액션 정보가 올바르지 않습니다.");
     /**
      * HTTP 응답 상태코드
      *  auth(UNAUTHORIZED) = 401

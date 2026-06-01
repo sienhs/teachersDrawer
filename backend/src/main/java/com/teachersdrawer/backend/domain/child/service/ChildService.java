@@ -56,9 +56,16 @@ public class ChildService {
 		return ChildResponse.from(childRepository.save(child));
 	}
 	
-	// 내 아이 목록 조회
+	// 내 아이 목록 조회 (PENDING 제외 — 확정된 아이만)
     public List<ChildResponse> getMyChildren(Long userId) {
-        return childRepository.findByUserId(userId).stream()
+        return childRepository.findByUserIdAndStatus(userId, "ENROLLED").stream()
+                .map(ChildResponse::from)
+                .toList();
+    }
+
+    // PENDING 아이 목록 (HWP 자동 생성, 확정 대기)
+    public List<ChildResponse> getMyPendingChildren(Long userId) {
+        return childRepository.findByUserIdAndStatus(userId, "PENDING").stream()
                 .map(ChildResponse::from)
                 .toList();
     }

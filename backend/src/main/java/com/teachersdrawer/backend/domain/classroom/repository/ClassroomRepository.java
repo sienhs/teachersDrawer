@@ -15,4 +15,7 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
 
     // 상태별 조회 (현재반만, 아카이브만)
     List<Classroom> findByUserIdAndStatusOrderByYearDesc(Long userId, String status);
+
+    // 연도 + 이름 정확 매칭 (analyze 시 반 자동 매칭)
+    java.util.Optional<Classroom> findByUserIdAndYearAndName(Long userId, Integer year, String name);
 }

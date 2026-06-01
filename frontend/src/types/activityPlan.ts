@@ -52,3 +52,86 @@ export interface ActivityPlanDetail extends ActivityPlanSummary {
 export interface MontessoriHistoryItem extends MontessoriRecord {
   planDate: string;
 }
+
+// ---- analyze / confirm 타입 ----
+
+export interface ParsedSection {
+  orderIndex: number;
+  label: string;
+  content: string;
+  category: string;
+}
+
+export interface ParsedMontessoriRecord {
+  childNameRaw: string;
+  area?: string | null;
+  material?: string | null;
+  confirmed?: string | null;
+}
+
+export interface ClassroomMatch {
+  nameFromHwp: string;
+  yearFromHwp: number;
+  existingId?: number | null;
+  existingName?: string | null;
+  existingStatus?: string | null;
+  willCreate: boolean;
+}
+
+export interface DuplicateCandidate {
+  id: number;
+  name: string;
+  status: string;
+  birthDate?: string | null;
+  memo?: string | null;
+  lastClassroomName?: string | null;
+}
+
+export interface ChildMatch {
+  nameFromHwp: string;
+  exactMatchId?: number | null;
+  duplicateCandidates: DuplicateCandidate[];
+  willCreate: boolean;
+}
+
+export interface ActivityPlanAnalysis {
+  fileKey: string;
+  fileName: string;
+  planDate: string;
+  subject?: string | null;
+  teacherName?: string | null;
+  classNameRaw?: string | null;
+  classTimeRaw?: string | null;
+  classDayCount?: number | null;
+  classroom: ClassroomMatch;
+  children: ChildMatch[];
+  sections: ParsedSection[];
+  montessoriRecords: ParsedMontessoriRecord[];
+  rawJson: string;
+}
+
+export interface ActivityPlanConfirmRequest {
+  fileKey: string;
+  fileName: string;
+  planDate: string;
+  subject?: string | null;
+  teacherName?: string | null;
+  classNameRaw?: string | null;
+  classTimeRaw?: string | null;
+  classDayCount?: number | null;
+  rawJson: string;
+  sections: ParsedSection[];
+  montessoriRecords: ParsedMontessoriRecord[];
+  classroomAction: {
+    useExisting: boolean;
+    existingId?: number | null;
+    newName?: string | null;
+    newYear?: number | null;
+  };
+  childActions: Array<{
+    nameFromHwp: string;
+    action: 'USE_EXISTING' | 'CREATE_NEW' | 'MERGE_WITH';
+    existingChildId?: number | null;
+    mergeTargetId?: number | null;
+  }>;
+}

@@ -1,6 +1,8 @@
 import api from './instance';
 import type { ApiResponse } from '../types/auth';
 import type {
+  ActivityPlanAnalysis,
+  ActivityPlanConfirmRequest,
   ActivityPlanDetail,
   ActivityPlanSummary,
   MontessoriHistoryItem,
@@ -68,5 +70,29 @@ export const activityPlanApi = {
       .get<ApiResponse<MontessoriHistoryItem[]>>(
         `/api/activity-plans/children/${childId}/montessori`,
       )
+      .then((r) => r.data.data),
+
+  // HWP 분석 (DB 저장 X — 팝업용)
+  analyze: (file: File, classroomId?: number) => {
+    const form = new FormData();
+    form.append('file', file);
+    if (classroomId != null) form.append('classroomId', String(classroomId));
+    return api
+      .post<ApiResponse<ActivityPlanAnalysis>>('/api/activity-plans/analyze', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data);
+  },
+
+  // 확정 저장
+  confirm: (request: ActivityPlanConfirmRequest) =>
+    api
+      .post<ApiResponse<ActivityPlanDetail>>('/api/activity-plans/confirm', request)
+      .then((r) => r.data.data),
+
+  // 거부 시 임시 파일 삭제
+  cancelTemp: (fileKey: string) =>
+    api
+      .delete<ApiResponse<void>>(`/api/activity-plans/temp?fileKey=${encodeURIComponent(fileKey)}`)
       .then((r) => r.data.data),
 };

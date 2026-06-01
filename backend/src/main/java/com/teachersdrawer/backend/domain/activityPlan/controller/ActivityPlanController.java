@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -22,9 +23,13 @@ import org.springframework.web.multipart.MultipartFile;
 import com.teachersdrawer.backend.domain.activityPlan.dto.ActivityPlanResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.ActivityPlanSummaryResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.MontessoriRecordResponse;
+import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.ActivityPlanAnalysisResponse;
+import com.teachersdrawer.backend.domain.activityPlan.dto.confirm.ActivityPlanConfirmRequest;
 import com.teachersdrawer.backend.domain.activityPlan.service.ActivityPlanService;
 import com.teachersdrawer.backend.global.response.ApiResponse;
 import com.teachersdrawer.backend.global.security.CustomUserDetails;
+
+import jakarta.validation.Valid;
 
 import lombok.RequiredArgsConstructor;
 
@@ -35,7 +40,38 @@ public class ActivityPlanController {
 
     private final ActivityPlanService activityPlanService;
 
-    // HWP 업로드
+    // HWP 분석 (DB 저장 X, 팝업용)
+    @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ActivityPlanAnalysisResponse>> analyze(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "classroomId", required = false) Long classroomId
+    ) {
+        ActivityPlanAnalysisResponse response = activityPlanService.analyze(userDetails.getId(), file, classroomId);
+        return ResponseEntity.ok(ApiResponse.success("HWP 분석 완료", response));
+    }
+
+    // 확정 저장
+    @PostMapping("/confirm")
+    public ResponseEntity<ApiResponse<ActivityPlanResponse>> confirm(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody @Valid ActivityPlanConfirmRequest request
+    ) {
+        ActivityPlanResponse response = activityPlanService.confirm(userDetails.getId(), request);
+        return ResponseEntity.ok(ApiResponse.success("활동계획안 저장 완료", response));
+    }
+
+    // 임시 파일 삭제 (거부)
+    @DeleteMapping("/temp")
+    public ResponseEntity<ApiResponse<Void>> cancelTemp(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam("fileKey") String fileKey
+    ) {
+        activityPlanService.cancelTemp(userDetails.getId(), fileKey);
+        return ResponseEntity.ok(ApiResponse.success("임시 파일 삭제 완료", null));
+    }
+
+    // HWP 업로드 (레거시 — 자동 확정)
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<ActivityPlanResponse>> upload(
             @AuthenticationPrincipal CustomUserDetails userDetails,
