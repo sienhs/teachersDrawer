@@ -76,4 +76,24 @@ public class ChildController {
         childService.delete(userDetails.getId(), childId);
         return ResponseEntity.ok(ApiResponse.success("아이 삭제 성공", null));
     }
+
+    // PENDING 일괄 확정
+    // POST /api/children/pending/confirm-all
+    @PostMapping("/pending/confirm-all")
+    public ResponseEntity<ApiResponse<List<Long>>> confirmAllPending(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        List<Long> confirmedIds = childService.confirmAllPending(userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("일괄 확정 성공", confirmedIds));
+    }
+
+    // PENDING 일괄 삭제
+    // DELETE /api/children/pending
+    @DeleteMapping("/pending")
+    public ResponseEntity<ApiResponse<Integer>> deleteAllPending(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        int count = childService.deleteAllPending(userDetails.getId());
+        return ResponseEntity.ok(ApiResponse.success("일괄 삭제 성공", count));
+    }
 }

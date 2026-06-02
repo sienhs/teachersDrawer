@@ -22,4 +22,10 @@ export const childApi = {
     api
       .get<ApiResponse<Child[]>>('/api/children', { params: status ? { status } : undefined })
       .then((r) => r.data.data),
+
+  confirmAllPending: () =>
+    api.post<ApiResponse<number[]>>('/api/children/pending/confirm-all').then((r) => r.data.data),
+
+  deleteAllPending: () =>
+    api.delete<ApiResponse<number>>('/api/children/pending').then((r) => r.data.data),
 };

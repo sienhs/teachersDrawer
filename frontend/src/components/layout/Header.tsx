@@ -34,8 +34,8 @@ export default function Header() {
         <input
           type="text"
           disabled
-          placeholder="검색 (준비 중)"
-          className="w-full max-w-md rounded-xl border border-gray-200 bg-white/70 px-4 py-2 text-sm text-gray-500 placeholder:text-gray-300 disabled:cursor-not-allowed"
+          placeholder="통합 검색 (준비 중)"
+          className="w-full max-w-md cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-400 placeholder:text-gray-400"
         />
       </div>
 

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import type { EventInput } from '@fullcalendar/core';
-import DashboardCalendar from '../../components/calendar/DashboardCalendar';
+
+const DashboardCalendar = lazy(() => import('../../components/calendar/DashboardCalendar'));
 import ActivityDetailPanel from '../../components/calendar/ActivityDetailPanel';
 import Spinner from '../../components/ui/Spinner';
 import { activityPlanApi } from '../../api/activityPlan';
@@ -227,11 +228,13 @@ export default function DashboardPage() {
             <Spinner />
           </div>
         )}
-        <DashboardCalendar
-          events={events}
-          onEventClick={handleEventClick}
-          onRangeChange={handleRangeChange}
-        />
+        <Suspense fallback={<div className="h-[600px] animate-pulse rounded-2xl bg-gray-100" />}>
+          <DashboardCalendar
+            events={events}
+            onEventClick={handleEventClick}
+            onRangeChange={handleRangeChange}
+          />
+        </Suspense>
         <ActivityDetailPanel
           detail={detail}
           open={panelOpen}

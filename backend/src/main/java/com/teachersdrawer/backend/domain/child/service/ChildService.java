@@ -12,6 +12,7 @@ import com.teachersdrawer.backend.domain.child.dto.ChildResponse;
 import com.teachersdrawer.backend.domain.child.dto.ChildUpdateRequest;
 import com.teachersdrawer.backend.domain.child.entity.Child;
 import com.teachersdrawer.backend.domain.child.repository.ChildRepository;
+import com.teachersdrawer.backend.domain.enrollment.repository.EnrollmentRepository;
 import com.teachersdrawer.backend.global.exception.BusinessException;
 import com.teachersdrawer.backend.global.exception.ErrorCode;
 
@@ -23,26 +24,19 @@ import lombok.RequiredArgsConstructor;
 public class ChildService {
 	private final ChildRepository childRepository;
 	private final UserRepository userRepository;
+	private final EnrollmentRepository enrollmentRepository;
 
     // 공통 헬퍼를 만들어서 아이를 조회하고 담당 아이가 맞는지 검증
     // 멀티유저 격리 - 남의 아이 id로 접근 차단
     private Child findOwnedChild(Long userId, Long childId) {
-        Child child = childRepository.findById(childId)
+        return childRepository.findByIdAndUserId(childId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
-
-        // 이 아이의 주인이 현재 로그인한 선생님이 아니면 차단
-        if (!child.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-        return child;
     }
 	
 	@Transactional
 	public ChildResponse create(Long userId, ChildCreateRequest request) {
 		
-		// 명확한 실제 조회
-		User user = userRepository.findById(userId)
-				.orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
+		User user = userRepository.getReferenceById(userId);
 		Child child = Child.builder()
                 .user(user)
                 .name(request.getName())
@@ -112,5 +106,22 @@ public class ChildService {
     public void delete(Long userId, Long childId) {
     	Child child = findOwnedChild(userId, childId);
     	childRepository.delete(child);
+    }
+
+    // PENDING 일괄 확정
+    @Transactional
+    public List<Long> confirmAllPending(Long userId) {
+        List<Child> pendingList = childRepository.findByUserIdAndStatus(userId, "PENDING");
+        pendingList.forEach(c -> c.changeStatus("ENROLLED"));
+        return pendingList.stream().map(Child::getId).toList();
+    }
+
+    // PENDING 일괄 삭제 (Enrollment FK 먼저 정리)
+    @Transactional
+    public int deleteAllPending(Long userId) {
+        List<Child> pendingList = childRepository.findByUserIdAndStatus(userId, "PENDING");
+        pendingList.forEach(c -> enrollmentRepository.deleteByChildId(c.getId()));
+        childRepository.deleteAll(pendingList);
+        return pendingList.size();
     }
 }

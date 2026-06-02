@@ -23,4 +23,7 @@ public interface ChildRepository extends JpaRepository<Child, Long>{
 
 	// 이름 전체 검색 (동명이인 후보 탐색용)
 	List<Child> findByUserIdAndName(Long userId, String name);
+
+	// 소유권 포함 단건 조회 (userId 불일치 시 empty — NOT_FOUND 처리)
+	Optional<Child> findByIdAndUserId(Long id, Long userId);
 }

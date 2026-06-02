@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -113,6 +114,17 @@ public class ActivityPlanController {
     ) {
         activityPlanService.delete(userDetails.getId(), planId);
         return ResponseEntity.ok(ApiResponse.success("활동계획안 삭제 성공", null));
+    }
+
+    // 원본 HWP 파일 교체 (편집 후 자동 저장)
+    @PutMapping(value = "/{planId}/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<Void>> updateFile(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable("planId") Long planId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        activityPlanService.updateFile(userDetails.getId(), planId, file);
+        return ResponseEntity.ok(ApiResponse.success("파일 업데이트 완료", null));
     }
 
     // 원본 HWP 다운로드

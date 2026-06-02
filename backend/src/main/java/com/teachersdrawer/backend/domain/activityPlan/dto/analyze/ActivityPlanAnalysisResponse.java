@@ -29,4 +29,7 @@ public class ActivityPlanAnalysisResponse {
     private List<ParsedMontessoriRecord> montessoriRecords;
 
     private String rawJson;
+
+    private Long duplicateOfId;
+    private String duplicateFileName;
 }

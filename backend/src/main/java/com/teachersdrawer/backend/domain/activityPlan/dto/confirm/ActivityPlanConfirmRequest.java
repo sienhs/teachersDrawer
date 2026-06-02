@@ -14,6 +14,9 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 public class ActivityPlanConfirmRequest {
+    /** null이면 신규 생성, non-null이면 기존 plan 업데이트 모드 */
+    private Long existingPlanId;
+
     @NotBlank
     private String fileKey;
     @NotBlank

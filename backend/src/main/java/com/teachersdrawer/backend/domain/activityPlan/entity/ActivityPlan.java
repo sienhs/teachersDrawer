@@ -68,4 +68,18 @@ public class ActivityPlan {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    /** 정리화면 반영 시 메타데이터 갱신. fileKey/fileName은 PUT file API에서 이미 갱신됨. */
+    public void updateContent(LocalDate planDate, String subject, String teacherName,
+                               String classNameRaw, String classTimeRaw, Integer classDayCount,
+                               String rawJson, Classroom classroom) {
+        this.planDate = planDate;
+        this.subject = subject;
+        this.teacherName = teacherName;
+        this.classNameRaw = classNameRaw;
+        this.classTimeRaw = classTimeRaw;
+        this.classDayCount = classDayCount;
+        this.rawJson = rawJson;
+        this.classroom = classroom;
+    }
 }

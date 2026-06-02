@@ -15,7 +15,7 @@
 - 핵심 가치: 선생님의 반복 업무(관찰 기록, 활동계획안 정리, 연도별 인수인계, **HWP 활동계획안 자동 분석**)를 덜어준다.
 - **HWP 활동계획안 자동 데이터 추출 + 추천형 에디터**가 이 서비스의 결정적 차별점.
 
-### 비전 — 추천형 에디터 (Phase 3+ ~ Phase 4)
+### 비전 — 추천형 에디터 (Phase 4)
 
 단순한 HWP 뷰어가 아니라 **선생님을 위한 코딩 IDE 같은 한글 에디터**.
 
@@ -28,6 +28,11 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 
 이전의 자료를 불러와서 자동완성처럼 쓰는 것. 타자치는 것보다 마우스 클릭 몇 번이 더 빠르게.
 시장에 없는 영역이며, 이 서비스의 진짜 차별점.
+
+추가 비전 디테일:
+- 노션식 슬래시 메뉴: [/] 입력 → 표(담당 아이 목록, 이전 표 템플릿) / 사진 / 체크리스트
+- AI 추천 ON/OFF 설정 (선생님 직장 제약 대비)
+- 처음부터 HWP 입출력 (export 안 타협)
 
 ---
 
@@ -45,6 +50,8 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - 선생님 간 데이터 인계 (현직장 인증 기반)
 - 활동계획안 "평가"·"확인" 칸 디지털 입력 기능 (HWP에선 비어있음)
 - 추천형 에디터 (코딩 IDE 자동완성처럼 과거 자료 기반 추천)
+- 중복 업로드 경고 (같은 planDate + classroomId면 확인 모달)
+- 활동계획안 편집 후 정리화면 반영 흐름 ([정리화면에 반영], 보류 중)
 
 ### UX
 - 자동 매칭된 아이의 자동 재매칭 (아이 신규 등록 시 기존 ActivityPlan의 MontessoriRecord 다시 연결)
@@ -66,6 +73,13 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - N+1 / 성능 정리 시점에 CustomUserDetails.getId() 활용해 user 재조회 제거
 - 코드 스플리팅 (FullCalendar 번들 553kB)
 
+### rhwp 관련 (Phase 3에서 발견)
+- rhwp 결제란 셀 병합 렌더링 버그 (upstream 모니터링)
+- rhwp "일일놀이실행안" 제목 미표시 (upstream 모니터링)
+- rhwp 중첩 표 내 행 추가/삭제 시 부모 표 영향
+- @rhwp/core의 pathJson 형식 발견 (Phase 4 추천 에디터에서 본격 해결)
+- renderPageHtml 우회 경로 검토 ([정리화면에 반영] 대안)
+
 ---
 
 ## 3. 기술 스택
@@ -85,6 +99,8 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - Zustand, Axios, React Router DOM
 - FullCalendar (월 뷰), react-calendar (미니 캘린더)
 - react-dropzone (파일 업로드)
+- **@rhwp/editor v0.7.13** — iframe 기반 HWP 에디터 (뷰어 + 편집 + Export)
+- **@rhwp/core v0.7.13** — 저수준 WASM 파서 (HwpDocument 약 150개 메서드)
 - 디자인 톤: 베이지(#FFF8F0) + 주황(#FF9F66), 토스풍
 - 작성 도구: Claude Code (VSCode)
 
@@ -93,10 +109,11 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
   - Docker Compose 사이드카, 포트 8001
   - POST /parse 엔드포인트: HWP/HWPX → 정규화 JSON
   - 꿈열매유치원 양식 파싱 검증 완료 (CASE_5_8, CASE_5_26)
-- **rhwp** ⏳ Phase 3 Step 3-D: 웹 임베드 HWP 에디터 (`@rhwp/editor` npm)
-  - Rust + WebAssembly, MIT 라이센스
-  - https://github.com/edwardkim/rhwp (v0.7.3)
-  - Step 3-D 진입 전에 안정성 검증 스파이크 필요
+- **rhwp 통합** ✅ Step 3-E-1, ✅ Step 3-E-2 (partial):
+  - 활동계획안 상세 페이지 우측 사이드 패널 (랜드마크 명세서 스타일)
+  - 뷰어 모드: ✅ 동작
+  - 편집 모드 + 자동 저장: ✅ 동작 (3초 polling + 1000포인트 샘플링)
+  - [정리화면에 반영]: ❌ 임시 비활성화 (버튼 disabled + tooltip "준비 중인 기능입니다", pyhwp ↔ rhwp export 비호환)
 
 ### Infra
 - Docker Compose: PostgreSQL + MinIO + hwp-parser
@@ -140,6 +157,8 @@ User (선생님)
 
 **자동 매칭은 정확 매칭 우선.** ENROLLED/PENDING 정확 매칭이면 자동 사용, GRADUATED/WITHDRAWN은 동명이인 후보로 사용자에게 묻기.
 
+**HWP는 처음부터 끝까지 HWP.** 우리 자체 포맷으로 변환하지 않음. 입력도 HWP, 출력도 HWP. 한컴오피스 호환성이 절대 우선.
+
 ### 엔티티 필드 (현재 구현 상태)
 
 ```
@@ -162,6 +181,7 @@ ActivityPlan  ✅
   fileKey(MinIO 객체 키, activity-plans/{userId}/{UUID}-{name}), fileName,
   rawJson(TEXT, 파싱 원본),
   createdAt, updatedAt
+  - updateContent(...) 도메인 메서드 (편집 후 메타 갱신)
 
 ActivitySection  ✅
   id, activityPlan(FK), orderIndex,
@@ -201,7 +221,7 @@ private void validateNotArchived(Classroom c) {
 |-------|------|------|------|
 | **1** | 2026.05.26~05.28 | Docker / 인증 / 학교 검색 / React 인증 흐름 | ✅ |
 | **2** | 2026.05.29~ | Child·Classroom·Enrollment ✅ / 관찰일지(후순위) ⏳ | ✅ |
-| **3** | 2026.05.30~ | HWP 자동 분석 풀스택 + 자동 등록 + rhwp 임베드 | 🔄 |
+| **3** | 2026.05.30~ | HWP 자동 분석 + 자동 등록 + rhwp 임베드 | 🔄 |
 | **4** | — | 추천형 에디터 / 반 복사·템플릿 / 통합 검색 / 모바일 | ⏳ |
 | **5** | — | AWS 배포 / 운영(HTTPS·CI) / 선생님 간 인계 | ⏳ |
 
@@ -218,13 +238,11 @@ private void validateNotArchived(Classroom c) {
 - Python 3.12 + FastAPI + pyhwp + BeautifulSoup
 - 꿈열매유치원 양식 파싱 알고리즘
 - pytest 9/9 통과 + Docker 컨테이너 end-to-end 검증
-- 두 샘플 모두 HTTP 200, 정확한 추출
 
 **Step 2 — Spring ActivityPlan 도메인 + 업로드 API ✅** (2026-05-30)
 - ActivityPlan / ActivitySection / MontessoriRecord 3개 엔티티
 - HwpParserClient (Spring RestClient)
 - FileStorageService (MinIO Java SDK 8.5.13)
-- 업로드 API: MinIO 저장 + hwp-parser 호출 + DB 정규화 저장
 - 11단계 end-to-end 검증 통과
 - 핵심 가치 검증: **김신의 5/8·5/26 몬테소리 활동 누적 추적 동작** ★
 
@@ -232,53 +250,88 @@ private void validateNotArchived(Classroom c) {
 - AppLayout (헤더 + 사이드바 + 메인) + 라우팅
 - API 클라이언트 4종 (child, classroom, enrollment, activityPlan)
 - DashboardCalendar (FullCalendar 월 뷰)
-- ActivityDetailPanel (우측 슬라이드 패널 — sections + 몬테소리)
-- 반·아이 필터 (아이 선택 시 몬테소리 있는 날만 표시)
-- 시연 가능한 첫 화면 확보
+- ActivityDetailPanel (우측 슬라이드 패널)
+- 반·아이 필터
 
 **Step 3-B — 활동계획안 풀스택 4페이지 ✅** (2026-06-01)
-- 업로드 페이지: react-dropzone, 반 선택, 진행 오버레이
-- 목록 페이지: 카드형 그리드, 반·기간 필터
-- 상세 페이지: 시간대별 활동(카테고리 색·펼침) + 몬테소리 표
-- 아이 상세 페이지: 미니 캘린더 + 영역별 교구 활동
-- 사이드바 메뉴 연결, 대시보드 [상세 보기] 버튼 활성화
+- 업로드 / 목록 / 상세 / 아이 상세
 - 시각 검증 완료: **김신 미니 캘린더에 5/8 + 5/26 두 점 누적 표시** ★
 
-**Step 3-C-1 — HWP 자동 등록 + 업로드 팝업 🔄** (2026-06-01)
+**Step 3-C-1 — HWP 자동 등록 + 업로드 팝업 ✅** (2026-06-01)
 - Child.status에 PENDING 추가
 - POST /api/activity-plans/analyze (분석만, DB 저장 X)
 - POST /api/activity-plans/confirm (사용자 확정 후 저장)
 - DELETE /api/activity-plans/temp (거부 시 정리)
 - 자동 등록: 반(없으면 생성), 아이(PENDING), Enrollment(연결)
 - 동명이인 감지: 후보 있을 때 라디오 선택
-- 프론트 AnalysisConfirmModal: 분석 → 모달 → 확정/거부
 - MinIO 객체 키 사용자별 격리: `activity-plans/{userId}/...`
-- 첫 검증 후 발견된 이슈:
-  - PENDING 정확 매칭이 동명이인 후보로 잡힘 → ENROLLED + PENDING 둘 다 USE_EXISTING 처리로 수정 필요
-  - 모달 정보 밀도 조정 필요 (자동 매칭은 요약, 결정 필요한 것만 카드)
+- ENROLLED + PENDING 둘 다 USE_EXISTING 처리 (재업로드 시 자동 매칭)
+- 모달 정보 밀도 조정 (자동 매칭은 요약, 결정 필요한 것만 카드)
 
-**Step 3-C-2 — 아이 관리 페이지 + PENDING 정리 UI ⏳ 다음**
+**Step 3-C-2 — 아이 관리 페이지 + PENDING 정리 UI ✅** (2026-06-02)
 - 사이드바 "아이 관리" 활성화
-- 전체 / PENDING 탭
-- 확정 / 병합 / 삭제 UI
-- 대시보드 상단 "확인 필요한 아이 N명" 배지
+- 전체 / PENDING 탭 (GET /api/children?status= 파라미터 추가)
+- 확정(PUT status→ENROLLED) / 삭제 / 일괄처리 UI
+- 대시보드 상단 "확인 필요한 아이 N명" 배지 → /children?tab=pending
 
-**Step 3-D — rhwp 안정성 검증 스파이크 ⏳**
-- 격리된 테스트 페이지에서 우리 양식 렌더링 검증
-- 편집 후 export 동일성 검증
-- 결과 따라 통합/부분/fork·개조 결정
+**Step 3-D — rhwp 안정성 검증 스파이크 ✅** (2026-06-02)
+- @rhwp/editor v0.7.13 설치 (peer dep 충돌 없음)
+- /_rhwp-test 격리 페이지
+- CASE_5_8.hwp, CASE_5_26.hwp 렌더링·편집·Export 전항목 검증
+- 보고서: mydocs/research/20260601-rhwp-evaluation.md
+- 결과: ⚠️ 부분 통과 → Step 3-E 통합 진행 결정
+  - 렌더링: 결제란·제목 깨짐 (export 후 한컴에서는 정상)
+  - 편집: 텍스트 OK, 중첩 표 행 추가/삭제만 부모 표 영향
+  - Export: ✅ 한컴오피스 완전 호환
 
-**Step 3-E — rhwp 통합 (검증 결과 따라) ⏳**
+**Step 3-E-1 — rhwp 뷰어 사이드 패널 ✅** (2026-06-02)
+- 활동계획안 상세 페이지 좌우 분할
+- RhwpEmbed (Step 3-D 코드 추출), RhwpViewerPanel (접/펼침 토글)
+- 접힘 48px 세로 바, 펼침 w-2/5
+- localStorage로 사용자 선호 기억
+- HWP 바이트 lazy load (첫 펼침 시점)
+
+**Step 3-E-2 — rhwp 편집 모드 + 자동 저장 ✅ (partial)** (2026-06-02)
+- 백엔드:
+  - PUT /api/activity-plans/{id}/file (MinIO 파일 교체)
+  - confirm API에 existingPlanId 지원 (기존 plan 업데이트 모드)
+  - sections/montessori deleteBy 메서드 추가
+- 프론트:
+  - RhwpEmbed에 editable + onChange (polling 방식)
+  - RhwpViewerPanel: [편집모드] 토글, 자동 저장, [정리화면에 반영] 버튼
+  - AnalysisConfirmModal에 existingPlanId prop
+- rhwp onChange 이벤트 없음 → 3초 setInterval + exportHwp 바이트 비교 (1000포인트 샘플링)
+- **막힘: [정리화면에 반영] 시 hwp-parser가 rhwp export 결과 못 읽음**
+  - 에러: 422 "변환 결과 HTML 파일 없음. 생성된 파일 목록: []"
+  - 원인: rhwp가 만든 HWP는 한컴 호환은 OK지만 pyhwp 사양은 통과 못 함
+  - rhwp 자체 export: HWP / HWPX / SVG만 (HTML/text/JSON 없음)
+
+**Step 3-E-2-a — @rhwp/core 탐색 ✅** (2026-06-02)
+- @rhwp/core v0.7.13 설치 (HwpDocument 약 150개 메서드)
+- /_rhwp-core-test 격리 페이지
+- 결과 보고서: mydocs/research/20260602-rhwp-core-exploration.md
+- 발견:
+  - 초기화 WASM 34ms + HwpDocument 40ms = 74ms
+  - 표 구조가 pyhwp와 다름: rhwp/core는 결제란+본문이 통합된 Table 0 (14×9, 35셀), Table 1 (3×2 방과후)
+  - 셀 텍스트 추출 완벽: pyhwp와 일치
+  - HTML 렌더링: renderPageHtml(0) 107,594자, (1) 43,034자
+- 막힘: **중첩 표(몬테소리) — getTableDimensionsByPath의 pathJson 형식 미확인, 부모 표 반복 반환**
+
+**Step 3-E-2-b 이후 — 보류** (2026-06-02)
+- 결정: 길 C (지금 멈춤, Phase 3 일단 마무리, Phase 4 추천 에디터 작업 시 본격 해결)
+- 임시 처리: [정리화면에 반영] 버튼 비활성화 + 사용자 안내
+- 진짜 비전을 위한 정공법(@rhwp/core 활용)은 유지하되 시간 두고
 
 ### Phase 3 설계 결정 (요약)
 1. 포맷: .hwp + .hwpx 둘 다 지원 (현재 .hwp만 구현, .hwpx는 TODO)
 2. 추출 유연성: Phase 3-A 한 양식 → Phase 3+ LLM 하이브리드
 3. 아키텍처: Docker Compose 사이드카 (내부망 통신)
 4. DB: 완전 정규화 + rawJson 안전망
-5. 편집: rhwp 임베드까지 도전 (Step 3-D 검증 후 결정)
-6. 업로드 흐름: 2단계 (분석 → 팝업 → 확정 시 저장)
-7. 자동 등록: 반·아이·Enrollment 모두 자동, 아이는 PENDING으로
-8. rhwp 안정성: 원본 보존 + 편집 export 동일성 둘 다 필수, 어려우면 fork·개조
+5. 업로드 흐름: 2단계 (분석 → 팝업 → 확정 시 저장)
+6. 자동 등록: 반·아이·Enrollment 모두 자동, 아이는 PENDING으로
+7. rhwp 통합: 뷰어 임베드 ✅, 편집 + 자동 저장 ✅, 정리화면 반영 ❌ 임시 비활성화 (Phase 4에서 @rhwp/core 활용해 해결)
+8. 편집 후 DB 처리: 사용자 명시적 트리거 ([정리화면에 반영]), 자동 저장은 파일만
+9. rhwp/core 도입: Phase 4 추천 에디터 비전과 일치, 단계적 활용
 
 ### Phase 3에서 알게 된 것
 - HWP 양식은 글자 사이 공백이 흔함 ("일  시", "학 급 명") → 정규화 후 매칭 필수
@@ -289,6 +342,9 @@ private void validateNotArchived(Classroom c) {
 - **MultipartFile은 한 번만 읽힘** → byte[]로 미리 보관해 MinIO·hwp-parser에 재사용
 - 활동계획안의 "평가" 칸·몬테소리 "확인" 칸은 보통 비어있음 → 현장에서 디지털 입력 기능 가치 큼
 - confirm 단계에서 재파싱 안 함 → sections/montessori를 프론트에서 그대로 전달해 hwp-parser 2중 호출 방지
+- **rhwp는 한컴 호환 OK, pyhwp 사양은 통과 못 함** → 편집 후 재분석은 hwp-parser 우회 필요
+- **rhwp onChange 이벤트 없음** → polling 3초 + 1000포인트 샘플링이 debounce 역할 겸함
+- **@rhwp/core의 표 구조는 pyhwp와 다름** (결제란이 본문에 통합) → 우리만의 매핑 전략 필요
 
 ---
 
@@ -303,8 +359,7 @@ private void validateNotArchived(Classroom c) {
 - GET `/kindergartens?sidoCode=&sggCode=&name=` (유치원)
 
 ### 아이 (`/api/children/**`) — 인증 필수
-- POST `/`, GET `/`, GET `/{childId}`, PUT `/{childId}`, DELETE `/{childId}`
-- GET `/`는 ENROLLED만 반환. PENDING은 별도 메서드.
+- POST `/`, GET `/` (?status=ENROLLED|PENDING|ALL), GET `/{childId}`, PUT `/{childId}`, DELETE `/{childId}`
 
 ### 반 (`/api/classrooms/**`) — 인증 필수
 - POST `/`, GET `/?status=`, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`
@@ -316,13 +371,14 @@ private void validateNotArchived(Classroom c) {
 
 ### 활동계획안 (`/api/activity-plans/**`) — 인증 필수
 - POST `/` (multipart) — HWP 업로드 (레거시, 자동 처리)
-- **POST `/analyze`** — 분석만 (DB 저장 X) ✨
-- **POST `/confirm`** — 사용자 확정 후 저장 ✨
-- **DELETE `/temp?fileKey=`** — 거부 시 임시 파일 정리 ✨
+- POST `/analyze` — 분석만 (DB 저장 X)
+- POST `/confirm` — 사용자 확정 후 저장 (existingPlanId 지원)
+- DELETE `/temp?fileKey=` — 거부 시 임시 파일 정리
 - GET `/` (?classroomId=, from=, to=) — 목록
 - GET `/{planId}` — 상세
 - DELETE `/{planId}` — 삭제 (MinIO 파일 동기 삭제)
 - GET `/{planId}/file` — 원본 HWP 다운로드
+- **PUT `/{planId}/file`** — 편집 후 파일 교체 (MinIO 덮어쓰기) ✨
 - GET `/children/{childId}/montessori` — 아이별 몬테소리 누적 이력
 
 ---
@@ -330,7 +386,7 @@ private void validateNotArchived(Classroom c) {
 ## 7. 환경 & 운영
 
 - 루트: `C:\Users\SSAFY\git\teachersDrawer` (집: `C:\Users\jhsun\teachersDrawer`)
-- 구조: `backend/`, `frontend/`, `hwp-parser/`, `samples/hwp/`, `mydocs/orders/`, `mydocs/history/`, `docker-compose.yml`, `PROJECT.md`, `README.md`
+- 구조: `backend/`, `frontend/`, `hwp-parser/`, `samples/hwp/`, `mydocs/orders/`, `mydocs/history/`, `mydocs/research/`, `docker-compose.yml`, `PROJECT.md`, `README.md`
 - GitHub: `sienhs`, `main`
 - IDE: STS(백) + VSCode·Claude Code(프론트·파서·복잡 작업) + Thunder Client
 
@@ -342,11 +398,14 @@ private void validateNotArchived(Classroom c) {
 
 ### 알려진 환경 이슈 / 교훈
 - STS 자체 컴파일러가 `-parameters` 무시 → `@RequestParam`/`@PathVariable`/`@Qualifier` 이름 명시 필수
+- **STS 변경 소스 컴파일 캐시 문제** → Project > Clean 필요 (소스 수정 후 메서드 인식 안 됨 시)
 - `ddl-auto: create`는 재시작마다 테이블 초기화. 안정화 후 `update`로 전환
 - 유치원알리미 API: 이름 검색 불가, `sidoCode`+`sggCode`+`currentPage=1` 필수
 - `@RequiredArgsConstructor`에서 `final` 누락 시 NPE
 - `@Builder` 기본값엔 `@Builder.Default` 필수
 - **Spring Boot 4.0**: `ClientHttpRequestFactories` 등 일부 API 제거됨
 - **MinIO 직접 DB 삭제 주의**: orphan 파일 발생. API 경로 사용 권장
-- 커밋은 사용자가 직접할 수 있도록 기능단위로 끊어서 고지
-
+- 커밋은 사용자가 직접 (작업 단위로 끊어서 안내)
+- **Thunder Client multipart 가끔 동작 안 함** → curl.exe 사용
+- **rhwp는 한컴 호환 OK, pyhwp 사양은 통과 못 함**
+- **rhwp onChange 이벤트 없음** → polling 3초 + 샘플링 비교

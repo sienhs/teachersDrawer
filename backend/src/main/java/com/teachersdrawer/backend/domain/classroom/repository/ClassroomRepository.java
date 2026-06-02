@@ -18,4 +18,7 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
 
     // 연도 + 이름 정확 매칭 (analyze 시 반 자동 매칭)
     java.util.Optional<Classroom> findByUserIdAndYearAndName(Long userId, Integer year, String name);
+
+    // 소유권 포함 단건 조회
+    java.util.Optional<Classroom> findByIdAndUserId(Long id, Long userId);
 }

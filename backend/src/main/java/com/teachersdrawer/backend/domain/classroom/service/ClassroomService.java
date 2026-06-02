@@ -26,8 +26,7 @@ public class ClassroomService {
     // 반 생성
     @Transactional
     public ClassroomResponse create(Long userId, ClassroomCreateRequest request) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        User user = userRepository.getReferenceById(userId);
 
         Classroom classroom = Classroom.builder()
                 .user(user)
@@ -97,13 +96,8 @@ public class ClassroomService {
 
     // 소유권 검증
     private Classroom findOwnedClassroom(Long userId, Long classroomId) {
-        Classroom classroom = classroomRepository.findById(classroomId)
+        return classroomRepository.findByIdAndUserId(classroomId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND));
-
-        if (!classroom.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-        return classroom;
     }
 
     // 아카이브 검증 (수정/삭제 시 사용)

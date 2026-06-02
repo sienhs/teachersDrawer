@@ -9,4 +9,6 @@ import com.teachersdrawer.backend.domain.activityPlan.entity.ActivitySection;
 public interface ActivitySectionRepository extends JpaRepository<ActivitySection, Long> {
 
     List<ActivitySection> findByActivityPlanIdOrderByOrderIndexAsc(Long planId);
+
+    void deleteByActivityPlanId(Long activityPlanId);
 }

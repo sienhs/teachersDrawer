@@ -9,4 +9,7 @@ public interface FileStorageService {
 
     /** 삭제 */
     void delete(String fileKey);
+
+    /** 기존 객체를 새 바이트로 교체 (같은 키 유지) */
+    void replace(String fileKey, byte[] bytes, String contentType);
 }

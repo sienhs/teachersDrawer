@@ -10,6 +10,7 @@ import type {
 
 interface Props {
   analysis: ActivityPlanAnalysis;
+  existingPlanId?: number;
   onConfirm: (request: ActivityPlanConfirmRequest) => Promise<void>;
   onCancel: () => void;
 }
@@ -32,7 +33,7 @@ function defaultChoice(cm: ChildMatch): ChildChoice {
   return { action: 'CREATE_NEW' };
 }
 
-export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: Props) {
+export default function AnalysisConfirmModal({ analysis, existingPlanId, onConfirm, onCancel }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [showAutoDetail, setShowAutoDetail] = useState(false);
 
@@ -71,6 +72,7 @@ export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: 
       });
 
       await onConfirm({
+        existingPlanId: existingPlanId ?? null,
         fileKey: analysis.fileKey,
         fileName: analysis.fileName,
         planDate: analysis.planDate,
@@ -97,7 +99,9 @@ export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: 
         <div className="flex items-start justify-between border-b border-gray-100 p-5">
           <div>
             <p className="text-xs text-gray-400">{formatPlanDate(analysis.planDate)}</p>
-            <h2 className="mt-0.5 text-lg font-bold text-gray-800">활동계획안 분석 결과</h2>
+            <h2 className="mt-0.5 text-lg font-bold text-gray-800">
+              {existingPlanId != null ? '수정된 활동계획안 반영' : '활동계획안 분석 결과'}
+            </h2>
             <p className="mt-0.5 text-sm text-[#FF9F66]">
               {analysis.classNameRaw || '반 미지정'}
               {analysis.teacherName ? ` · ${analysis.teacherName}` : ''}
@@ -115,6 +119,19 @@ export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: 
 
         {/* 본문 */}
         <div className="flex-1 space-y-5 overflow-y-auto p-5">
+          {/* 중복 경고 */}
+          {analysis.duplicateOfId && (
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+              <p className="text-sm text-yellow-800">
+                ⚠️ 같은 날짜에 이미 활동계획안이 있습니다:{' '}
+                <strong>{analysis.duplicateFileName}</strong>
+              </p>
+              <p className="mt-1 text-xs text-yellow-700">
+                그대로 저장하면 같은 날짜에 활동계획안이 2개가 됩니다. 파일을 잘못 골랐다면 [거부]를 눌러 다시 시도해 주세요.
+              </p>
+            </div>
+          )}
+
           {/* 반 */}
           <section>
             <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-400">반</p>

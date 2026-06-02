@@ -74,4 +74,21 @@ public class MinioFileStorageService implements FileStorageService {
             throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
         }
     }
+
+    @Override
+    public void replace(String fileKey, byte[] bytes, String contentType) {
+        try {
+            minioClient.putObject(
+                    PutObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(fileKey)
+                            .stream(new ByteArrayInputStream(bytes), bytes.length, -1)
+                            .contentType(contentType)
+                            .build()
+            );
+        } catch (Exception e) {
+            log.error("MinIO 파일 교체 실패: {}", e.getMessage());
+            throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
+        }
+    }
 }

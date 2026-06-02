@@ -1,6 +1,7 @@
 package com.teachersdrawer.backend.domain.enrollment.repository;
 
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -16,4 +17,10 @@ public interface EnrollmentRepository extends JpaRepository<Enrollment, Long> {
 
     // 중복 배정 체크
     boolean existsByChildIdAndClassroomId(Long childId, Long classroomId);
+
+    // 아이 삭제 시 FK 정리
+    void deleteByChildId(Long childId);
+
+    // 소유권 포함 단건 조회 (classroom.user.id 경유)
+    Optional<Enrollment> findByIdAndClassroom_UserId(Long id, Long userId);
 }

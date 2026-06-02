@@ -11,4 +11,6 @@ public interface MontessoriRecordRepository extends JpaRepository<MontessoriReco
     List<MontessoriRecord> findByActivityPlanId(Long planId);
 
     List<MontessoriRecord> findByChildIdOrderByActivityPlan_PlanDateDesc(Long childId);
+
+    void deleteByActivityPlanId(Long activityPlanId);
 }

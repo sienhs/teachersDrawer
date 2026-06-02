@@ -95,4 +95,15 @@ export const activityPlanApi = {
     api
       .delete<ApiResponse<void>>(`/api/activity-plans/temp?fileKey=${encodeURIComponent(fileKey)}`)
       .then((r) => r.data.data),
+
+  // 편집 후 자동 저장 (MinIO 파일 교체)
+  updateFile: (planId: number, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api
+      .put<ApiResponse<void>>(`/api/activity-plans/${planId}/file`, form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      .then((r) => r.data.data);
+  },
 };

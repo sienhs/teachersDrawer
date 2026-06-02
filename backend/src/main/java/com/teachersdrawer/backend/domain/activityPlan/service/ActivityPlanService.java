@@ -84,11 +84,8 @@ public class ActivityPlanService {
         // classroomId 소유권·아카이브 검증
         Classroom classroom = null;
         if (classroomId != null) {
-            classroom = classroomRepository.findById(classroomId)
+            classroom = classroomRepository.findByIdAndUserId(classroomId, userId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND));
-            if (!classroom.getUser().getId().equals(userId)) {
-                throw new BusinessException(ErrorCode.FORBIDDEN);
-            }
             if (classroom.isArchived()) {
                 throw new BusinessException(ErrorCode.ARCHIVED_CLASSROOM);
             }
@@ -121,8 +118,7 @@ public class ActivityPlanService {
                     .orElse(null);
         }
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        User user = userRepository.getReferenceById(userId);
 
         ActivityPlan plan = ActivityPlan.builder()
                 .user(user)
@@ -231,6 +227,25 @@ public class ActivityPlanService {
         }
     }
 
+    // ---- 파일 업데이트 (자동 저장) ----
+
+    @Transactional
+    public void updateFile(Long userId, Long planId, MultipartFile file) {
+        ActivityPlan plan = findOwnedPlan(userId, planId);
+        validateHwpExtension(file.getOriginalFilename());
+
+        byte[] bytes;
+        try {
+            bytes = file.getBytes();
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
+        }
+
+        String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
+        fileStorageService.replace(plan.getFileKey(), bytes, contentType);
+        activityPlanRepository.save(plan); // updatedAt 갱신
+    }
+
     // ---- 아이별 몬테소리 이력 ----
 
     public List<MontessoriRecordResponse> getChildMontessoriHistory(Long userId, Long childId) {
@@ -282,6 +297,18 @@ public class ActivityPlanService {
         // 반 매칭
         ClassroomMatchResult classroomMatch = matchClassroom(userId, nameFromHwp, planDate);
 
+        // 중복 업로드 체크 (같은 반 + 같은 날짜)
+        Long duplicateOfId = null;
+        String duplicateFileName = null;
+        if (classroomMatch.getExistingId() != null) {
+            var dupOpt = activityPlanRepository.findByUserIdAndClassroomIdAndPlanDate(
+                    userId, classroomMatch.getExistingId(), planDate);
+            if (dupOpt.isPresent()) {
+                duplicateOfId = dupOpt.get().getId();
+                duplicateFileName = dupOpt.get().getFileName();
+            }
+        }
+
         // 아이 매칭 (몬테소리 레코드의 childNameRaw, 중복 제거)
         List<String> childNames = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
@@ -309,6 +336,8 @@ public class ActivityPlanService {
                 .sections(parsed.getSections() != null ? parsed.getSections() : List.of())
                 .montessoriRecords(parsed.getMontessoriRecords() != null ? parsed.getMontessoriRecords() : List.of())
                 .rawJson(parsed.getRawJson())
+                .duplicateOfId(duplicateOfId)
+                .duplicateFileName(duplicateFileName)
                 .build();
     }
 
@@ -321,16 +350,14 @@ public class ActivityPlanService {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+        User user = userRepository.getReferenceById(userId);
 
         // 반 처리
         Classroom classroom;
         if (req.getClassroomAction().isUseExisting()) {
             Long cid = req.getClassroomAction().getExistingId();
-            classroom = classroomRepository.findById(cid)
+            classroom = classroomRepository.findByIdAndUserId(cid, userId)
                     .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND));
-            if (!classroom.getUser().getId().equals(userId)) throw new BusinessException(ErrorCode.FORBIDDEN);
         } else {
             classroom = classroomRepository.save(Classroom.builder()
                     .user(user)
@@ -345,16 +372,10 @@ public class ActivityPlanService {
             String name = ca.getNameFromHwp();
             Child resolved;
             switch (ca.getAction()) {
-                case "USE_EXISTING" -> {
-                    resolved = childRepository.findById(ca.getExistingChildId())
-                            .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
-                    if (!resolved.getUser().getId().equals(userId)) throw new BusinessException(ErrorCode.FORBIDDEN);
-                }
-                case "MERGE_WITH" -> {
-                    resolved = childRepository.findById(ca.getMergeTargetId())
-                            .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
-                    if (!resolved.getUser().getId().equals(userId)) throw new BusinessException(ErrorCode.FORBIDDEN);
-                }
+                case "USE_EXISTING" -> resolved = childRepository.findByIdAndUserId(ca.getExistingChildId(), userId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
+                case "MERGE_WITH" -> resolved = childRepository.findByIdAndUserId(ca.getMergeTargetId(), userId)
+                        .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
                 case "CREATE_NEW" -> resolved = childRepository.save(Child.builder()
                         .user(user).name(name).status("PENDING").build());
                 default -> throw new BusinessException(ErrorCode.INVALID_CONFIRM_ACTION);
@@ -362,20 +383,44 @@ public class ActivityPlanService {
             resolvedChildren.put(name, resolved);
         }
 
-        // ActivityPlan 저장
-        ActivityPlan plan = activityPlanRepository.save(ActivityPlan.builder()
-                .user(user)
-                .classroom(classroom)
-                .planDate(req.getPlanDate())
-                .subject(req.getSubject())
-                .teacherName(req.getTeacherName())
-                .classNameRaw(req.getClassNameRaw())
-                .classTimeRaw(req.getClassTimeRaw())
-                .classDayCount(req.getClassDayCount())
-                .fileKey(req.getFileKey())
-                .fileName(req.getFileName())
-                .rawJson(req.getRawJson())
-                .build());
+        ActivityPlan plan;
+
+        if (req.getExistingPlanId() != null) {
+            // 기존 plan 업데이트 모드
+            plan = findOwnedPlan(userId, req.getExistingPlanId());
+
+            // analyze에서 생성된 임시 파일 삭제 (기존 fileKey는 PUT file로 이미 교체됨)
+            try {
+                fileStorageService.delete(req.getFileKey());
+            } catch (Exception e) {
+                log.warn("임시 분석 파일 삭제 실패 (fileKey={}): {}", req.getFileKey(), e.getMessage());
+            }
+
+            // 기존 자식 레코드 삭제 (FK 순서: montessori → section)
+            montessoriRecordRepository.deleteByActivityPlanId(plan.getId());
+            activitySectionRepository.deleteByActivityPlanId(plan.getId());
+
+            // 메타데이터 갱신 (fileKey/fileName은 그대로 유지)
+            plan.updateContent(req.getPlanDate(), req.getSubject(), req.getTeacherName(),
+                    req.getClassNameRaw(), req.getClassTimeRaw(), req.getClassDayCount(),
+                    req.getRawJson(), classroom);
+            plan = activityPlanRepository.save(plan);
+        } else {
+            // 신규 생성 (기존 로직)
+            plan = activityPlanRepository.save(ActivityPlan.builder()
+                    .user(user)
+                    .classroom(classroom)
+                    .planDate(req.getPlanDate())
+                    .subject(req.getSubject())
+                    .teacherName(req.getTeacherName())
+                    .classNameRaw(req.getClassNameRaw())
+                    .classTimeRaw(req.getClassTimeRaw())
+                    .classDayCount(req.getClassDayCount())
+                    .fileKey(req.getFileKey())
+                    .fileName(req.getFileName())
+                    .rawJson(req.getRawJson())
+                    .build());
+        }
 
         // sections 저장
         List<ActivitySection> sections = new ArrayList<>();
@@ -446,12 +491,8 @@ public class ActivityPlanService {
     // ---- 헬퍼 ----
 
     private ActivityPlan findOwnedPlan(Long userId, Long planId) {
-        ActivityPlan plan = activityPlanRepository.findById(planId)
+        return activityPlanRepository.findByIdAndUserId(planId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ACTIVITY_PLAN_NOT_FOUND));
-        if (!plan.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-        return plan;
     }
 
     private ClassroomMatchResult matchClassroom(Long userId, String nameFromHwp, LocalDate planDate) {

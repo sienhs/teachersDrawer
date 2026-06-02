@@ -5,6 +5,7 @@ import { ko } from 'date-fns/locale';
 import { activityPlanApi } from '../../api/activityPlan';
 import SectionCard from '../../components/activityPlan/SectionCard';
 import MontessoriTable from '../../components/activityPlan/MontessoriTable';
+import RhwpViewerPanel from '../../components/activityPlan/RhwpViewerPanel';
 import Spinner from '../../components/ui/Spinner';
 import type { ActivityPlanDetail } from '../../types/activityPlan';
 
@@ -133,7 +134,10 @@ export default function ActivityPlanDetailPage() {
         </div>
       )}
 
-      <div className="space-y-5">
+      {/* AppLayout p-6을 취소하고 h=[calc(100vh-88px)]로 뷰포트를 채움 (88px = header h-16 + pt-6) */}
+      <div className="flex -mx-6 -mb-6 overflow-hidden h-[calc(100vh-88px)]">
+        {/* 좌측: 기존 정리화면 */}
+        <div className="flex-1 min-w-0 overflow-y-auto px-6 pt-0 pb-6 space-y-5">
         {/* 상단 바 */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <button
@@ -199,6 +203,10 @@ export default function ActivityPlanDetailPage() {
             <MontessoriTable records={detail.montessoriRecords} />
           </div>
         </div>
+        </div>{/* 좌측 끝 */}
+
+        {/* 우측: rhwp 뷰어 사이드 패널 */}
+        <RhwpViewerPanel planId={detail.id} fileName={detail.fileName} classroomId={detail.classroomId} />
       </div>
     </>
   );

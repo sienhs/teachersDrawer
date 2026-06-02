@@ -131,17 +131,7 @@ export default function ChildrenManagePage() {
     setBulkAction(null);
     setProcessing(true);
     try {
-      await Promise.all(
-        pending.map((c) =>
-          childApi.update(c.id, {
-            name: c.name,
-            birthDate: c.birthDate ?? undefined,
-            gender: c.gender ?? undefined,
-            memo: c.memo ?? undefined,
-            status: 'ENROLLED',
-          }),
-        ),
-      );
+      await childApi.confirmAllPending();
       await fetchData();
       setTab('enrolled');
     } catch {
@@ -156,7 +146,7 @@ export default function ChildrenManagePage() {
     setBulkAction(null);
     setProcessing(true);
     try {
-      await Promise.all(pending.map((c) => childApi.delete(c.id)));
+      await childApi.deleteAllPending();
       setPending([]);
     } catch {
       alert('일괄 삭제에 실패했습니다.');

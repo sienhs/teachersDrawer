@@ -108,9 +108,12 @@ export interface ActivityPlanAnalysis {
   sections: ParsedSection[];
   montessoriRecords: ParsedMontessoriRecord[];
   rawJson: string;
+  duplicateOfId?: number | null;
+  duplicateFileName?: string | null;
 }
 
 export interface ActivityPlanConfirmRequest {
+  existingPlanId?: number | null;
   fileKey: string;
   fileName: string;
   planDate: string;

@@ -14,6 +14,8 @@ import ActivityPlanDetailPage from './pages/activityPlan/ActivityPlanDetailPage'
 import ChildDetailPage from './pages/child/ChildDetailPage';
 import ChildrenManagePage from './pages/children/ChildrenManagePage';
 import ComingSoonPage from './pages/placeholder/ComingSoonPage';
+import RhwpTestPage from './pages/devtest/RhwpTestPage';
+import RhwpCoreTestPage from './pages/devtest/RhwpCoreTestPage';
 
 function App() {
   const [isRestoring, setIsRestoring] = useState(true);
@@ -80,6 +82,10 @@ function App() {
           <Route path="/children" element={<ChildrenManagePage />} />
           <Route path="/classrooms" element={<ComingSoonPage title="반 관리" />} />
         </Route>
+
+        {/* 개발 도구 — 숨김 라우팅, 사이드바 미표시 */}
+        <Route path="/_rhwp-test" element={<RhwpTestPage />} />
+        <Route path="/_rhwp-core-test" element={<RhwpCoreTestPage />} />
 
         {/* 알 수 없는 경로 → 대시보드 */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -65,16 +65,10 @@ public class EnrollmentService {
 
     @Transactional
     public void unenroll(Long userId, Long enrollmentId) {
-        Enrollment enrollment = enrollmentRepository.findById(enrollmentId)
+        Enrollment enrollment = enrollmentRepository.findByIdAndClassroom_UserId(enrollmentId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.ENROLLMENT_NOT_FOUND));
 
-        // 이 배정의 반이 내 반인지 검증
-        Classroom classroom = enrollment.getClassroom();
-        if (!classroom.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-
-        if (classroom.isArchived()) {
+        if (enrollment.getClassroom().isArchived()) {
             throw new BusinessException(ErrorCode.ARCHIVED_CLASSROOM);
         }
 
@@ -84,20 +78,12 @@ public class EnrollmentService {
     // ---- 공통 헬퍼 ----
 
     private Child findOwnedChild(Long userId, Long childId) {
-        Child child = childRepository.findById(childId)
+        return childRepository.findByIdAndUserId(childId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
-        if (!child.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-        return child;
     }
 
     private Classroom findOwnedClassroom(Long userId, Long classroomId) {
-        Classroom classroom = classroomRepository.findById(classroomId)
+        return classroomRepository.findByIdAndUserId(classroomId, userId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND));
-        if (!classroom.getUser().getId().equals(userId)) {
-            throw new BusinessException(ErrorCode.FORBIDDEN);
-        }
-        return classroom;
     }
 }
