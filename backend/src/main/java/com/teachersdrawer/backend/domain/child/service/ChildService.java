@@ -69,6 +69,20 @@ public class ChildService {
                 .map(ChildResponse::from)
                 .toList();
     }
+
+    // status 파라미터 기반 목록 조회 (null/blank/ENROLLED → ENROLLED, PENDING → PENDING, ALL → 전체)
+    public List<ChildResponse> getMyChildrenByStatus(Long userId, String status) {
+        if (status == null || status.isBlank() || "ENROLLED".equalsIgnoreCase(status)) {
+            return childRepository.findByUserIdAndStatus(userId, "ENROLLED").stream()
+                    .map(ChildResponse::from).toList();
+        }
+        if ("ALL".equalsIgnoreCase(status)) {
+            return childRepository.findByUserId(userId).stream()
+                    .map(ChildResponse::from).toList();
+        }
+        return childRepository.findByUserIdAndStatus(userId, status.toUpperCase()).stream()
+                .map(ChildResponse::from).toList();
+    }
     
     // 아이 단건 조회 (소유권검증)
     public ChildResponse getChild(Long userId, Long childId) {

@@ -348,4 +348,5 @@ private void validateNotArchived(Classroom c) {
 - `@Builder` 기본값엔 `@Builder.Default` 필수
 - **Spring Boot 4.0**: `ClientHttpRequestFactories` 등 일부 API 제거됨
 - **MinIO 직접 DB 삭제 주의**: orphan 파일 발생. API 경로 사용 권장
-- 작업 단위마다 Git 커밋 (파일 유실 경험)
+- 커밋은 사용자가 직접할 수 있도록 기능단위로 끊어서 고지
+

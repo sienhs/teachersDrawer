@@ -12,6 +12,7 @@ import ActivityPlanListPage from './pages/activityPlan/ActivityPlanListPage';
 import ActivityPlanUploadPage from './pages/activityPlan/ActivityPlanUploadPage';
 import ActivityPlanDetailPage from './pages/activityPlan/ActivityPlanDetailPage';
 import ChildDetailPage from './pages/child/ChildDetailPage';
+import ChildrenManagePage from './pages/children/ChildrenManagePage';
 import ComingSoonPage from './pages/placeholder/ComingSoonPage';
 
 function App() {
@@ -76,8 +77,7 @@ function App() {
           {/* 아이 */}
           <Route path="/children/:childId" element={<ChildDetailPage />} />
 
-          {/* 미구현 placeholder */}
-          <Route path="/children" element={<ComingSoonPage title="아이 관리" />} />
+          <Route path="/children" element={<ChildrenManagePage />} />
           <Route path="/classrooms" element={<ComingSoonPage title="반 관리" />} />
         </Route>
 

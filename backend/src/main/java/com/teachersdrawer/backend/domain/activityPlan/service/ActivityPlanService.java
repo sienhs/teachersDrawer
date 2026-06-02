@@ -471,9 +471,17 @@ public class ActivityPlanService {
                 results.add(ChildMatchResult.useExisting(exact.get()));
                 continue;
             }
-            // 다른 상태의 동명이인 후보 탐색
+            // PENDING도 정확 매칭이면 자동 처리 (같은 HWP 재업로드 시 중복 방지)
+            var pending = childRepository.findFirstByUserIdAndStatusAndName(userId, "PENDING", name);
+            if (pending.isPresent()) {
+                results.add(ChildMatchResult.useExisting(pending.get()));
+                continue;
+            }
+            // 동명이인 후보: GRADUATED/WITHDRAWN만 표시 (PENDING은 위에서 자동 처리됨)
             List<Child> candidates = childRepository.findByUserIdAndName(userId, name)
-                    .stream().filter(c -> !"ENROLLED".equals(c.getStatus())).toList();
+                    .stream()
+                    .filter(c -> "GRADUATED".equals(c.getStatus()) || "WITHDRAWN".equals(c.getStatus()))
+                    .toList();
             if (!candidates.isEmpty()) {
                 List<DuplicateCandidateResult> cands = candidates.stream()
                         .map(c -> DuplicateCandidateResult.builder()

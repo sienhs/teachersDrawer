@@ -17,4 +17,9 @@ export const childApi = {
 
   delete: (id: number) =>
     api.delete<ApiResponse<void>>(`/api/children/${id}`).then((r) => r.data.data),
+
+  listByStatus: (status?: 'ENROLLED' | 'PENDING' | 'ALL') =>
+    api
+      .get<ApiResponse<Child[]>>('/api/children', { params: status ? { status } : undefined })
+      .then((r) => r.data.data),
 };

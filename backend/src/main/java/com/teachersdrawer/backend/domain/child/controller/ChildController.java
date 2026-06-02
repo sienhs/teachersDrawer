@@ -33,12 +33,13 @@ public class ChildController {
     }
 
     // 내 아이 목록 조회
-    // GET /api/children
+    // GET /api/children?status=ENROLLED|PENDING|ALL (기본: ENROLLED)
     @GetMapping
     public ResponseEntity<ApiResponse<List<ChildResponse>>> getMyChildren(
-            @AuthenticationPrincipal CustomUserDetails userDetails
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(name = "status", required = false) String status
     ) {
-        List<ChildResponse> response = childService.getMyChildren(userDetails.getId());
+        List<ChildResponse> response = childService.getMyChildrenByStatus(userDetails.getId(), status);
         return ResponseEntity.ok(ApiResponse.success("아이 목록 조회 성공", response));
     }
 

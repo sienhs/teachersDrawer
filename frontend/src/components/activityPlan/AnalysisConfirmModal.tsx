@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import type {
   ActivityPlanAnalysis,
   ActivityPlanConfirmRequest,
   ChildMatch,
+  DuplicateCandidate,
 } from '../../types/activityPlan';
 
 interface Props {
@@ -33,8 +34,8 @@ function defaultChoice(cm: ChildMatch): ChildChoice {
 
 export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: Props) {
   const [submitting, setSubmitting] = useState(false);
+  const [showAutoDetail, setShowAutoDetail] = useState(false);
 
-  // 각 아이별 선택 상태
   const [choices, setChoices] = useState<Record<string, ChildChoice>>(() => {
     const init: Record<string, ChildChoice> = {};
     for (const cm of analysis.children) {
@@ -43,19 +44,21 @@ export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: 
     return init;
   });
 
-  const newCount = useMemo(
-    () => Object.values(choices).filter((c) => c.action === 'CREATE_NEW').length,
-    [choices],
+  // 3분류: 자동 매칭 / 신규 등록 / 동명이인 확인 필요
+  const autoMatched = analysis.children.filter((cm) => cm.exactMatchId != null);
+  const toCreate = analysis.children.filter(
+    (cm) => cm.exactMatchId == null && cm.duplicateCandidates.length === 0,
   );
-  const existingCount = analysis.children.length - newCount;
+  const withDuplicates = analysis.children.filter((cm) => cm.duplicateCandidates.length > 0);
 
   const handleConfirm = async () => {
     setSubmitting(true);
     try {
       const { classroom } = analysis;
-      const classroomAction = classroom.existingId != null
-        ? { useExisting: true, existingId: classroom.existingId }
-        : { useExisting: false, newName: classroom.nameFromHwp, newYear: classroom.yearFromHwp };
+      const classroomAction =
+        classroom.existingId != null
+          ? { useExisting: true, existingId: classroom.existingId }
+          : { useExisting: false, newName: classroom.nameFromHwp, newYear: classroom.yearFromHwp };
 
       const childActions = analysis.children.map((cm) => {
         const choice = choices[cm.nameFromHwp] ?? { action: 'CREATE_NEW' };
@@ -137,11 +140,53 @@ export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: 
           {/* 아이 목록 */}
           <section>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              아이 ({analysis.children.length}명 · 기존 {existingCount}명, 신규 {newCount}명)
+              아이 ({analysis.children.length}명)
             </p>
-            <div className="space-y-1.5">
-              {analysis.children.map((cm) => (
-                <ChildRow
+            <div className="space-y-2">
+              {/* 자동 매칭 요약 */}
+              {autoMatched.length > 0 && (
+                <div className="rounded-xl bg-gray-50 px-4 py-2.5 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span>
+                      <span className="font-semibold text-green-600">✓ </span>
+                      <span className="text-gray-700">
+                        기존 아이 {autoMatched.length}명 자동 매칭됨
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAutoDetail((v) => !v)}
+                      className="text-xs text-blue-500 hover:underline"
+                    >
+                      {showAutoDetail ? '접기' : '상세 보기'}
+                    </button>
+                  </div>
+                  {showAutoDetail && (
+                    <ul className="mt-2 space-y-0.5 pl-5 text-gray-500">
+                      {autoMatched.map((cm) => (
+                        <li key={cm.nameFromHwp} className="list-disc">
+                          {cm.nameFromHwp}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {/* 신규 등록 요약 */}
+              {toCreate.length > 0 && (
+                <div className="rounded-xl bg-orange-50 px-4 py-2.5 text-sm">
+                  <span className="font-semibold text-[#FF9F66]">+ </span>
+                  <span className="text-gray-700">
+                    새로 등록될 아이 {toCreate.length}명:{' '}
+                    {toCreate.map((cm) => cm.nameFromHwp).join(', ')}
+                  </span>
+                </div>
+              )}
+
+              {/* 동명이인 카드 (라디오 선택 필요) */}
+              {withDuplicates.map((cm) => (
+                <DuplicateCard
                   key={cm.nameFromHwp}
                   childMatch={cm}
                   choice={choices[cm.nameFromHwp]}
@@ -184,56 +229,31 @@ export default function AnalysisConfirmModal({ analysis, onConfirm, onCancel }: 
   );
 }
 
-// ── 아이별 행 ──────────────────────────────────────────────
+// ── 동명이인 카드 (라디오 선택 필요) ──────────────────────────────────────────────
 
-interface ChildRowProps {
+interface DuplicateCardProps {
   childMatch: ChildMatch;
   choice: ChildChoice;
   onChange: (c: ChildChoice) => void;
 }
 
 const STATUS_LABEL: Record<string, string> = {
-  PENDING: 'PENDING',
   GRADUATED: '졸업',
   WITHDRAWN: '퇴소',
-  ENROLLED: '재원',
 };
 
-function ChildRow({ childMatch, choice, onChange }: ChildRowProps) {
-  const { nameFromHwp, exactMatchId, duplicateCandidates } = childMatch;
+function DuplicateCard({ childMatch, choice, onChange }: DuplicateCardProps) {
+  const { nameFromHwp, duplicateCandidates } = childMatch;
 
-  // 정확 매칭 — 단순 표시
-  if (exactMatchId != null) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl bg-gray-50 px-4 py-2.5 text-sm">
-        <span className="font-semibold text-green-600">✓</span>
-        <span className="font-medium text-gray-800">{nameFromHwp}</span>
-        <span className="text-gray-400">기존 등록</span>
-      </div>
-    );
-  }
-
-  // 후보 없음 → 새로 추가 (단순 표시)
-  if (duplicateCandidates.length === 0) {
-    return (
-      <div className="flex items-center gap-2 rounded-xl bg-orange-50 px-4 py-2.5 text-sm">
-        <span className="font-semibold text-[#FF9F66]">+</span>
-        <span className="font-medium text-gray-800">{nameFromHwp}</span>
-        <span className="text-gray-400">새로 추가 (PENDING)</span>
-      </div>
-    );
-  }
-
-  // 동명이인 후보 → 라디오 선택
   return (
     <div className="rounded-xl border border-orange-200 bg-orange-50/60 px-4 py-3 text-sm">
       <div className="mb-2 flex items-center gap-1.5">
         <span className="text-base">⚠</span>
         <span className="font-semibold text-gray-800">{nameFromHwp}</span>
-        <span className="text-gray-500">— 이름 중복</span>
+        <span className="text-gray-500">— 동명이인 확인 필요</span>
       </div>
       <div className="space-y-1.5 pl-1">
-        {duplicateCandidates.map((cand) => (
+        {duplicateCandidates.map((cand: DuplicateCandidate) => (
           <label key={cand.id} className="flex cursor-pointer items-start gap-2">
             <input
               type="radio"

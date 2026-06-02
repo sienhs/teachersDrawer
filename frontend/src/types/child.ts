@@ -1,5 +1,5 @@
 // 백엔드 ChildResponse 대응
-export type ChildStatus = 'ENROLLED' | 'GRADUATED' | 'WITHDRAWN';
+export type ChildStatus = 'ENROLLED' | 'PENDING' | 'GRADUATED' | 'WITHDRAWN';
 
 export interface Child {
   id: number;

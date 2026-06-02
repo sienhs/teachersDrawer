@@ -13,7 +13,6 @@ import type { Classroom } from '../../types/classroom';
 import type { Child } from '../../types/child';
 
 const ALL = 'all' as const;
-
 const ymd = (d: Date) => format(d, 'yyyy-MM-dd');
 
 export default function DashboardPage() {
@@ -23,6 +22,7 @@ export default function DashboardPage() {
   const [plans, setPlans] = useState<ActivityPlanSummary[]>([]);
   const [classrooms, setClassrooms] = useState<Classroom[]>([]);
   const [children, setChildren] = useState<Child[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
 
   // 상태
   const [loading, setLoading] = useState(true);
@@ -50,9 +50,14 @@ export default function DashboardPage() {
 
     (async () => {
       try {
-        const [cls, kids] = await Promise.all([classroomApi.list(), childApi.list()]);
+        const [cls, kids, pendingKids] = await Promise.all([
+          classroomApi.list(),
+          childApi.list(),
+          childApi.listByStatus('PENDING'),
+        ]);
         setClassrooms(cls);
         setChildren(kids);
+        setPendingCount(pendingKids.length);
       } catch {
         // 필터 메타 로드 실패는 치명적이지 않음 — 캘린더는 계속 동작
       }
@@ -136,13 +141,25 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-gray-800">대시보드</h1>
           {loading && <Spinner className="h-5 w-5" />}
         </div>
-        <button
-          type="button"
-          onClick={() => navigate('/activity-plans/new')}
-          className="rounded-xl bg-[#FF9F66] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f08c52]"
-        >
-          + 업로드하기
-        </button>
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/children?tab=pending')}
+              className="flex items-center gap-1.5 rounded-xl bg-amber-100 px-3 py-2 text-sm font-semibold text-amber-700 transition-colors hover:bg-amber-200"
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" />
+              확인 필요한 아이 {pendingCount}명
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => navigate('/activity-plans/new')}
+            className="rounded-xl bg-[#FF9F66] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#f08c52]"
+          >
+            + 업로드하기
+          </button>
+        </div>
       </div>
 
       {/* 필터 바 */}
