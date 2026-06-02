@@ -1,38 +1,46 @@
 # teachersDrawer (선생님의 서랍)
 
-유치원 / 초중고 교사를 위한 업무 관리 웹 서비스. HWP 활동계획안 보관, 학교 정보 조회, 반·아이 관리, 관찰일지 등 흩어진 교사 업무를 한 곳에서 관리하는 것을 목표로 합니다.
+유치원·초중고 교사를 위한 업무 관리 웹 서비스. **HWP 활동계획안을 자동으로 분석·구조화**하고, 반·아이·반배정·아이별 활동 누적 기록을 한 곳에서 관리한다.
 
-> 본 프로젝트는 현재 개발 진행 중인 미공개(비공개) 프로젝트입니다. 인증·학교 정보 조회·아이/반 관리 기능이 구현되어 있으며, 핵심 기능은 계속 추가되고 있습니다. 문서에 기재된 API와 구조는 개발 진행에 따라 변경될 수 있습니다.
+> 본 프로젝트는 현재 개발 진행 중인 미공개 프로젝트입니다. 인증·학교 검색·아이/반/반배정 관리·HWP 자동 분석·rhwp 임베드 뷰어·편집까지 구현되어 있으며, 핵심 기능은 계속 추가되고 있습니다. 문서에 기재된 API와 구조는 진행에 따라 변경될 수 있습니다.
+
+## 핵심 가치
+
+- **HWP 활동계획안 자동 분석**: 한컴오피스 파일을 업로드하면 시간대별 활동·아이별 몬테소리 활동을 자동 추출해 DB에 정규화 저장
+- **아이 자동 등록**: HWP 안의 아이 이름·반·담임을 인식해 PENDING으로 자동 등록, 사용자가 확인만 하면 끝
+- **아이별 누적 추적**: 한 아이가 여러 활동계획안에 등장하면 캘린더에 자동 누적 표시
+- **HWP 원본 보존 + 웹 편집**: 페이지 안에 한컴오피스 같은 편집기 임베드 (rhwp). 편집 후 export 시 한컴오피스 호환
 
 ## 기술 스택
 
 ### Backend
-- Java 21
-- Spring Boot 4.0.x
-- Spring Security + JWT (jjwt 0.12.6)
-- Spring Data JPA
-- QueryDSL 5.1.0 (jakarta)
+- Java 21, Spring Boot 4.0
+- Spring Security 6 + JWT (Access in-memory / Refresh HttpOnly Cookie)
+- JPA (Hibernate) + QueryDSL
 - PostgreSQL 16
-- MinIO (파일 스토리지)
-- Lombok
-- Gradle
+- MinIO (HWP 파일 스토리지)
+- Spring RestClient (외부 서비스 호출)
 
 ### Frontend
-- React 19
-- TypeScript
-- Vite
-- Tailwind CSS 4
-- React Router 7
-- Zustand (상태 관리)
-- Axios
+- React 19 + Vite + TypeScript
+- Tailwind CSS 4 (베이지 + 주황 토스풍)
+- Zustand, Axios, React Router 7
+- FullCalendar (월 뷰, lazy load), react-calendar (미니), react-dropzone
+- `@rhwp/editor`, `@rhwp/core` (Rust + WebAssembly 기반 HWP 에디터/파서)
+
+### HWP 처리
+- **hwp-parser 컨테이너**: Python 3.12 + FastAPI + pyhwp + BeautifulSoup
+- POST /parse 엔드포인트로 HWP → 정규화 JSON 변환
+- 꿈열매유치원 양식 검증 완료, LLM 기반 양식 일반화는 후속 단계
 
 ### Infra
-- Docker / Docker Compose (PostgreSQL, MinIO)
+- Docker Compose: PostgreSQL, MinIO, hwp-parser
 - 외부 연동: NEIS 교육정보 API, 유치원알리미(e-childschoolinfo) API
+- 배포 목표: AWS
 
-## API 구조 흐름
+## 시스템 흐름
 
-전체 요청은 다음과 같은 계층을 거칩니다.
+전체 요청 흐름:
 
 ```
 Client (axios)
@@ -40,96 +48,95 @@ Client (axios)
   → Controller (요청 검증 / 응답 래핑)
   → Service (비즈니스 로직 / 트랜잭션)
   → Repository (JPA) · 외부 API Client
-  → DB(PostgreSQL) · NEIS / 유치원알리미
+  → DB(PostgreSQL) · NEIS / 유치원알리미 · MinIO · hwp-parser
 ```
 
 모든 응답은 `ApiResponse<T>` 한 가지 포맷으로 통일되며, 구조는 `{ success, message, data }` 입니다. 예외는 `GlobalExceptionHandler`가 잡아 동일 포맷으로 변환합니다.
 
-### 1. 인증 흐름 (Spring Security + JWT)
+### HWP 업로드 흐름 (2단계)
 
-요청이 들어오면 `UsernamePasswordAuthenticationFilter` 앞에 등록된 `JwtFilter`가 먼저 동작합니다.
+```
+1. POST /api/activity-plans/analyze (multipart)
+   → MinIO 임시 저장 + hwp-parser 호출 + 자동 매칭 시도 (DB 저장 X)
+   → 분석 결과 응답: 반/아이/활동 미리보기 + 중복 감지
+2. 사용자가 모달에서 확인
+3. POST /api/activity-plans/confirm (분석 결과 + 사용자 결정)
+   → 반/아이(PENDING)/Enrollment 자동 생성 + ActivityPlan 저장
+   → DB 갱신 모드(existingPlanId)도 지원
+```
 
-1. `JwtFilter`가 `Authorization: Bearer <token>` 헤더에서 Access Token을 추출합니다.
-2. `JwtUtil.isTokenValid()`로 서명과 만료를 검증하고, 유효하면 토큰에서 이메일(subject)을 꺼냅니다.
-3. 이메일로 `UserDetailsService`(=`CustomUserDetailService`)를 통해 `CustomUserDetails`를 조회하고, `UsernamePasswordAuthenticationToken`을 만들어 `SecurityContextHolder`에 저장합니다.
-4. 이후 컨트롤러는 `@AuthenticationPrincipal CustomUserDetails`로 현재 사용자 정보(id 포함)에 즉시 접근합니다.
+분석에서 매칭 못 한 아이는 **PENDING 상태**로 자동 등록되어 사용자가 아이 관리 페이지에서 일괄 확정/삭제할 수 있습니다.
 
-세션은 `STATELESS`로 설정되어 사용하지 않으며, CSRF / formLogin / httpBasic은 모두 비활성화되어 있습니다. `/api/auth/**`, `/api/schools/**`는 인증 없이 접근 가능하고 나머지(`/api/children/**`, `/api/classrooms/**` 등)는 모두 인증이 필요합니다.
+### 인증 흐름 (Spring Security + JWT)
 
-#### CustomUserDetails
+1. `JwtFilter`가 `Authorization: Bearer <token>` 헤더에서 Access Token을 추출
+2. `JwtUtil.isTokenValid()`로 서명·만료 검증
+3. 이메일로 `CustomUserDetailService`를 통해 `CustomUserDetails`를 조회, `UsernamePasswordAuthenticationToken`을 만들어 `SecurityContextHolder`에 저장
+4. 컨트롤러는 `@AuthenticationPrincipal CustomUserDetails`로 현재 사용자에 즉시 접근
 
-`CustomUserDetails`는 우리 `User` 엔티티를 그대로 감싸는 `UserDetails` 구현체입니다. Spring 내장 `User`는 이메일·비밀번호만 들고 있어 매 요청마다 DB 재조회가 필요했습니다. `CustomUserDetails`는 우리 `User` 엔티티 전체를 SecurityContext에 보관하여, 컨트롤러에서 `userDetails.getId()`로 현재 로그인 사용자의 id를 즉시 사용할 수 있도록 합니다.
+세션은 STATELESS, CSRF / formLogin / httpBasic 모두 비활성화. `/api/auth/**`, `/api/schools/**`는 공개, 나머지는 인증 필요.
 
-### 2. 토큰 정책
+### 토큰 정책
 
-- Access Token: 응답 바디(`ApiResponse.data.accessToken`)로 전달, 클라이언트 메모리에서 관리 (만료 15분)
-- Refresh Token: `HttpOnly` 쿠키(`refresh_token`)로 전달하여 JS 접근을 차단, XSS 토큰 탈취를 방지 (만료 7일)
-- Refresh Token은 DB(`RefreshToken`)에도 저장되어, 재발급 시 저장된 토큰과 대조해 탈취 여부를 검증합니다.
-- 토큰 서명은 HS256(HMAC-SHA256) 방식을 사용합니다.
+- Access Token: 응답 바디로 전달, 클라이언트 메모리(Zustand)에서 관리, 만료 15분
+- Refresh Token: HttpOnly 쿠키(`refresh_token`)로 전달하여 JS 접근 차단, 만료 7일
+- Refresh Token은 DB(`RefreshToken`)에도 저장되어 재발급 시 대조 검증
+- 서명: HS256 (HMAC-SHA256)
 
-### 3. 인증 API (`/api/auth`)
+### 멀티유저 격리
 
-| Method | Endpoint | 설명 | 인증 |
-|---|---|---|---|
-| POST | `/api/auth/signup` | 회원가입 (이메일 중복 검사, 비밀번호 BCrypt 암호화, 학교 정보 옵션) | 불필요 |
-| POST | `/api/auth/login` | 로그인. Access Token은 바디, Refresh Token은 HttpOnly 쿠키로 발급 | 불필요 |
-| POST | `/api/auth/reissue` | 쿠키의 Refresh Token으로 Access Token 재발급 | 불필요(쿠키) |
-| POST | `/api/auth/logout` | Refresh Token 쿠키 만료 처리 | 불필요(쿠키) |
+모든 도메인 Repository에 `findByIdAndUserId(id, userId)` 패턴을 두어 조회·소유권을 한 쿼리로 처리합니다. 소유자가 다른 경우 FORBIDDEN이 아닌 NOT_FOUND를 반환하여 리소스 존재 여부조차 노출하지 않습니다.
 
-회원가입 시 비밀번호는 `@Pattern`으로 영문·숫자·특수문자 각 1개 이상, 8자 이상을 강제합니다. 학교 정보(코드/이름/유형)는 선택 입력으로, 가입 후 등록할 수 있습니다.
+## API 요약
 
-### 4. 학교 정보 API (`/api/schools`)
+### 인증 (`/api/auth/**`) — 공개
+- POST `/signup`, POST `/login`, POST `/reissue`, POST `/logout`
 
-| Method | Endpoint | 설명 |
-|---|---|---|
-| GET | `/api/schools/search?name=` | 초·중·고 검색 (NEIS API) |
-| GET | `/api/schools/kindergartens?sidoCode=&sggCode=&name=` | 유치원 검색 (유치원알리미 API) |
-| GET | `/api/schools/regions` | 시도 목록 조회 |
-| GET | `/api/schools/regions/{sidoCode}` | 해당 시도의 시군구 목록 조회 (가나다순) |
+### 학교 (`/api/schools/**`) — 공개
+- GET `/regions`, GET `/regions/{sidoCode}` — 시도·시군구 코드
+- GET `/search?name=` — 초중고 (NEIS)
+- GET `/kindergartens?sidoCode=&sggCode=&name=` — 유치원 (유치원알리미)
 
-`SchoolService`가 `NeisClient` / `KinderClient`를 통해 외부 교육 API를 호출하며, 시도·시군구 코드는 `RegionData`(`region_codes.json` 기반, 17개 시도·260개 시군구)로 제공합니다.
+### 아이 (`/api/children/**`) — 인증 필수
+- POST `/`, GET `/?status=`, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`
+- POST `/pending/confirm-all`, DELETE `/pending` — PENDING 일괄 처리
 
-### 5. 아이 API (`/api/children`) — 인증 필수
+### 반 (`/api/classrooms/**`) — 인증 필수
+- POST `/`, GET `/?status=`, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`
+- POST `/{id}/archive`, POST `/{id}/activate`
 
-| Method | Endpoint | 설명 |
-|---|---|---|
-| POST | `/api/children` | 아이 등록 (name 필수, birthDate/gender/memo 옵션) |
-| GET | `/api/children` | 내 아이 목록 조회 |
-| GET | `/api/children/{childId}` | 아이 단건 조회 |
-| PUT | `/api/children/{childId}` | 아이 정보 수정 (status 변경 포함: ENROLLED/GRADUATED/WITHDRAWN) |
-| DELETE | `/api/children/{childId}` | 아이 삭제 |
+### 반배정 (`/api/enrollments/**`) — 인증 필수
+- POST `/`, DELETE `/{id}`, GET `/children/{childId}`, GET `/classrooms/{classroomId}`
 
-`Child`는 선생님이 소유한 독립 엔티티로, 연도가 바뀌어도 같은 인물로 유지됩니다. 모든 조회·수정·삭제는 `userId` 기반으로 격리되어, 남의 아이 id를 알아도 접근할 수 없습니다(`FORBIDDEN`).
-
-### 6. 반 API (`/api/classrooms`) — 인증 필수
-
-| Method | Endpoint | 설명 |
-|---|---|---|
-| POST | `/api/classrooms` | 반 생성 (year + name) |
-| GET | `/api/classrooms` | 내 반 전체 목록 (연도 내림차순) |
-| GET | `/api/classrooms?status=ACTIVE` | 현재 운영 중인 반만 조회 |
-| GET | `/api/classrooms?status=ARCHIVED` | 아카이브된 반만 조회 |
-| GET | `/api/classrooms/{classroomId}` | 반 단건 조회 |
-| PUT | `/api/classrooms/{classroomId}` | 반 이름 수정 (ARCHIVED는 차단) |
-| POST | `/api/classrooms/{classroomId}/archive` | 반 아카이브 (학년 마치고 보관) |
-| POST | `/api/classrooms/{classroomId}/activate` | 아카이브된 반 복구 |
-| DELETE | `/api/classrooms/{classroomId}` | 반 삭제 (ARCHIVED는 차단, 복구 후 가능) |
-
-`Classroom`은 연도(year) 단위로 구분됩니다. 같은 이름의 반이라도 연도가 다르면 별개 레코드입니다. `status` 필드로 ACTIVE(현재, 편집 가능)와 ARCHIVED(과거, 읽기 전용)를 구분합니다. ARCHIVED 상태인 반은 수정·삭제가 차단(`ARCHIVED_CLASSROOM`)되며, 복구(activate) 후에야 가능합니다.
+### 활동계획안 (`/api/activity-plans/**`) — 인증 필수
+- POST `/analyze` — 분석만 (DB 저장 X, 중복 감지 포함)
+- POST `/confirm` — 사용자 확정 후 저장 (신규/업데이트 모드)
+- DELETE `/temp?fileKey=` — 거부 시 정리
+- GET `/`, GET `/{id}`, DELETE `/{id}`
+- GET `/{id}/file` — HWP 다운로드
+- PUT `/{id}/file` — 편집 후 파일 교체
+- GET `/children/{childId}/montessori` — 아이별 몬테소리 누적 이력
 
 ## 데이터 모델
 
 ```
 User (선생님)
-  ├─ Child (아이) ───────────── 선생님이 관리하는 아이, 독립 엔티티
-  ├─ Classroom (반) ─────────── 연도별 반 (ACTIVE / ARCHIVED)
-  ├─ Enrollment (반배정) ────── Child ↔ Classroom (N:M) — 예정
-  └─ Observation (관찰일지) ─── Child에 직접 연결 — 예정
+  ├─ Child (아이)
+  │     status: ENROLLED | PENDING | GRADUATED | WITHDRAWN
+  ├─ Classroom (반)
+  │     연도별, ACTIVE / ARCHIVED
+  ├─ Enrollment (반배정) — Child ↔ Classroom (N:M)
+  ├─ Observation (관찰일지) — Child 직접 연결 (예정)
+  └─ ActivityPlan (활동계획안) — HWP 1개 = 1 ActivityPlan
+        ├─ ActivitySection — 시간대별 활동 (등원/점심/바깥놀이…)
+        └─ MontessoriRecord — 아이별 교구 활동
 ```
 
-**아이(Child)는 반(Classroom)에 종속되지 않습니다.** 유치원에서는 진급·순환보직으로 동일 교사가 같은 아이를 여러 해 연속 맡는 경우가 있으며, 이때 한 아이의 누적 성장 기록을 연도에 걸쳐 이어볼 수 있어야 합니다. 이를 위해 `Enrollment`(반배정) 엔티티가 "언제, 어느 아이가, 어느 반에" 속하는지를 표현하는 N:M 연결 역할을 합니다.
+**아이(Child)는 반(Classroom)에 종속되지 않습니다.** 진급·순환보직으로 같은 아이를 여러 해 맡는 경우 누적 성장 기록을 이어볼 수 있도록, `Enrollment`(반배정)가 "언제, 어느 아이가, 어느 반에" 속하는지를 표현하는 N:M 연결 역할을 합니다.
 
-`Observation`(관찰일지)은 `Child`에 직접 연결되어, 반이 바뀌어도 아이 기준으로 기록이 이어집니다. `classroomId`는 참고용으로 함께 보관합니다.
+**관찰일지(Observation)**도 `Child`에 직접 연결되어, 반이 바뀌어도 아이 기준으로 기록이 이어집니다.
+
+**활동계획안(ActivityPlan)**은 완전 정규화 + `rawJson` 안전망. 검색·통계가 핵심이라 정규화가 필수이고, 파싱 원본을 보존해 알고리즘 개선 시 재파싱 없이 재처리 가능합니다.
 
 자세한 설계 의도와 진행 상황은 `PROJECT.md`를 참고하세요.
 
@@ -137,37 +144,40 @@ User (선생님)
 
 ```
 teachersDrawer
-├── backend          # Spring Boot 애플리케이션
+├── backend                  # Spring Boot 애플리케이션
 │   └── src/main/java/com/teachersdrawer/backend
 │       ├── domain
-│       │   ├── auth         # 인증 (회원가입/로그인/JWT/RefreshToken)
-│       │   ├── school       # 학교 정보 조회 (NEIS / 유치원알리미)
-│       │   ├── child        # 아이(Child) CRUD
-│       │   └── classroom    # 반(Classroom) CRUD + 아카이브
-│       └── global           # 공통 영역
-│           ├── config        # SecurityConfig, CorsConfig, DataInitializer
-│           ├── exception     # BusinessException, ErrorCode, GlobalExceptionHandler
-│           ├── response      # ApiResponse<T>
-│           └── security      # JwtFilter, JwtUtil, CustomUserDetails
-├── frontend         # React + Vite 애플리케이션
+│       │   ├── auth           # 인증 (회원가입/로그인/JWT/RefreshToken)
+│       │   ├── school         # 학교 정보 조회 (NEIS / 유치원알리미)
+│       │   ├── child          # 아이 CRUD
+│       │   ├── classroom      # 반 CRUD + 아카이브
+│       │   ├── enrollment     # 반배정 CRUD
+│       │   └── activityPlan   # 활동계획안 자동 분석·저장
+│       └── global
+│           ├── config         # SecurityConfig, CorsConfig
+│           ├── exception      # BusinessException, ErrorCode, GlobalExceptionHandler
+│           ├── response       # ApiResponse<T>
+│           └── security       # JwtFilter, JwtUtil, CustomUserDetails
+├── frontend                 # React + Vite 애플리케이션
 │   └── src
-│       ├── api          # axios instance, auth/school API
-│       ├── components   # ProtectedRoute 등 공통 컴포넌트
-│       ├── pages        # auth(login/signup), home
-│       ├── store        # Zustand authStore
-│       └── types        # 타입 정의
-├── docker-compose.yml   # PostgreSQL, MinIO 컨테이너
-├── PROJECT.md           # 기획·설계·로드맵 문서
+│       ├── api                # axios instance, API clients
+│       ├── components         # 공통 컴포넌트 (Layout, activityPlan 등)
+│       ├── pages              # dashboard, activityPlan, children, auth
+│       ├── store              # Zustand authStore
+│       └── types
+├── hwp-parser               # Python FastAPI + pyhwp (HWP 파싱 사이드카)
+├── samples/hwp              # 검증용 HWP 샘플
+├── mydocs                   # 기획·작업 지시서·연구 보고서
+├── docker-compose.yml
+├── PROJECT.md
 └── README.md
 ```
-
-각 도메인 패키지는 `controller/ · dto/ · entity/ · repository/ · service/`의 동일한 레이어 구조를 따릅니다.
 
 ## 시작하기
 
 ### 사전 요구사항
 - JDK 21
-- Node.js
+- Node.js 20+
 - Docker / Docker Compose
 
 ### 인프라 실행
@@ -183,7 +193,7 @@ docker-compose up -d
 cd backend
 ./gradlew bootRun
 ```
-- Backend: http://localhost:8080
+Backend: http://localhost:8080
 
 ### 프론트엔드 실행
 ```bash
@@ -191,41 +201,31 @@ cd frontend
 npm install
 npm run dev
 ```
-- Frontend: http://localhost:5173
+Frontend: http://localhost:5173
 
 ### hwp-parser 단독 실행 및 테스트
 
-#### hwp-parser만 빌드·실행
+#### 컨테이너만 띄우기
 ```bash
 docker-compose up -d hwp-parser
+curl http://localhost:8001/health   # {"status":"ok"}
 ```
 
-#### 헬스체크
+#### HWP 파일 파싱
 ```bash
-curl http://localhost:8001/health
-# {"status":"ok"}
-```
-
-#### HWP 파일 파싱 (curl)
-```bash
-# samples/hwp/ 에 HWP 파일 배치 후
 curl -X POST http://localhost:8001/parse \
   -F "file=@samples/hwp/CASE_5_8.hwp"
 ```
 
 #### 로컬 단위 테스트 (Docker 없이)
 ```bash
-# Python 3.12 환경에서
 cd hwp-parser
 pip install -r requirements.txt
-
-# samples/hwp/ 에 CASE_5_8.hwp, CASE_5_26.hwp 배치 후
 pytest tests/ -v
-
-# HWP 파일 경로 별도 지정 시
+# 또는 SAMPLES_DIR 지정
 SAMPLES_DIR=/path/to/hwp pytest tests/ -v
 ```
 
 ## 환경 설정 주의
 
-`application.yml`에 DB 접속 정보, JWT secret, MinIO 인증 정보, 외부 API 키가 포함되어 있습니다. 운영 환경에서는 환경 변수 또는 별도 설정 파일로 분리하고, 현재 노출된 키와 시크릿은 반드시 재발급 후 교체해야 합니다. 또한 로그인 시 발급되는 Refresh Token 쿠키는 운영 환경에서 `Secure` 플래그를 활성화(HTTPS)해야 합니다.
+`application.yml`에 DB 접속 정보, JWT secret, MinIO 인증 정보, 외부 API 키가 포함되어 있습니다. 운영 환경에서는 환경 변수 또는 별도 설정 파일로 분리하고, 현재 노출된 키와 시크릿은 반드시 재발급 후 교체해야 합니다. Refresh Token 쿠키는 운영 환경에서 `Secure` 플래그를 활성화(HTTPS)해야 합니다.

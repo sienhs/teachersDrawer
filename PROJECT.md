@@ -39,7 +39,7 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 ## 2. 백로그
 
 ### 기능
-- 통합 검색 (아이/일지/활동계획안 across)
+- 통합 검색 (아이/일지/활동계획안 across) — 검색바 placeholder 자리 마련됨
 - 처음 반 생성 시 데이터 일괄 불러오기
 - 업로드 파일 분석해 과거 일자 기록 추출
 - 기존 반의 템플릿 불러오기 (반 복사)
@@ -50,28 +50,20 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - 선생님 간 데이터 인계 (현직장 인증 기반)
 - 활동계획안 "평가"·"확인" 칸 디지털 입력 기능 (HWP에선 비어있음)
 - 추천형 에디터 (코딩 IDE 자동완성처럼 과거 자료 기반 추천)
-- 중복 업로드 경고 (같은 planDate + classroomId면 확인 모달)
 - 활동계획안 편집 후 정리화면 반영 흐름 ([정리화면에 반영], 보류 중)
+- 반 관리 페이지 (현재 사이드바 "준비 중")
 
 ### UX
 - 자동 매칭된 아이의 자동 재매칭 (아이 신규 등록 시 기존 ActivityPlan의 MontessoriRecord 다시 연결)
-- 우상단 검색바 활성화 (현재 placeholder)
 - 모바일 최적화
 
 ### 운영
-- 에러 메시지 정보 노출 최소화 (FORBIDDEN 403 → NOT_FOUND 404 통일 검토)
 - MinIO orphan 파일 정리 (DB 직접 삭제 시 객체 남음, cleanup job)
 - ddl-auto: create → update 전환 (안정화 시점)
 - 운영 환경: HTTPS, Refresh Token Secure 플래그, 환경변수 분리, 시크릿 재발급
-- PENDING 아이 일괄 삭제 또는 일괄 확정 API
-  - DELETE /api/children/pending
-  - POST /api/children/pending/confirm-all
 
 ### 리팩토링
-- 공통 OwnershipValidator 추출 (Child/Classroom/Enrollment/ActivityPlan 검증 헬퍼 4곳 중복)
 - Enroll 시 연도 정합성 정책 (아이/반 연도 불일치 경고 여부)
-- N+1 / 성능 정리 시점에 CustomUserDetails.getId() 활용해 user 재조회 제거
-- 코드 스플리팅 (FullCalendar 번들 553kB)
 
 ### rhwp 관련 (Phase 3에서 발견)
 - rhwp 결제란 셀 병합 렌더링 버그 (upstream 모니터링)
@@ -79,6 +71,14 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - rhwp 중첩 표 내 행 추가/삭제 시 부모 표 영향
 - @rhwp/core의 pathJson 형식 발견 (Phase 4 추천 에디터에서 본격 해결)
 - renderPageHtml 우회 경로 검토 ([정리화면에 반영] 대안)
+
+### 완료된 백로그 (참고)
+- ✅ FORBIDDEN→NOT_FOUND 통일 (묶음 2-K 작업으로 자연 해결)
+- ✅ 공통 OwnershipValidator (Repository findByIdAndUserId 방식으로 더 단순화)
+- ✅ user 재조회 제거 (getReferenceById 적용)
+- ✅ 코드 스플리팅 (FullCalendar 분리, 메인 번들 787kB→560kB)
+- ✅ PENDING 일괄 처리 API
+- ✅ 중복 업로드 경고
 
 ---
 
@@ -97,7 +97,7 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - React + Vite + TypeScript
 - Tailwind CSS v4
 - Zustand, Axios, React Router DOM
-- FullCalendar (월 뷰), react-calendar (미니 캘린더)
+- FullCalendar (월 뷰, lazy load), react-calendar (미니 캘린더)
 - react-dropzone (파일 업로드)
 - **@rhwp/editor v0.7.13** — iframe 기반 HWP 에디터 (뷰어 + 편집 + Export)
 - **@rhwp/core v0.7.13** — 저수준 WASM 파서 (HwpDocument 약 150개 메서드)
@@ -109,11 +109,11 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
   - Docker Compose 사이드카, 포트 8001
   - POST /parse 엔드포인트: HWP/HWPX → 정규화 JSON
   - 꿈열매유치원 양식 파싱 검증 완료 (CASE_5_8, CASE_5_26)
-- **rhwp 통합** ✅ Step 3-E-1, ✅ Step 3-E-2 (partial):
+- **rhwp 통합** ✅ Step 3-E-1, 🔄 Step 3-E-2:
   - 활동계획안 상세 페이지 우측 사이드 패널 (랜드마크 명세서 스타일)
-  - 뷰어 모드: ✅ 동작
-  - 편집 모드 + 자동 저장: ✅ 동작 (3초 polling + 1000포인트 샘플링)
-  - [정리화면에 반영]: ❌ 임시 비활성화 (버튼 disabled + tooltip "준비 중인 기능입니다", pyhwp ↔ rhwp export 비호환)
+  - 뷰어 모드: 동작
+  - 편집 모드 + 자동 저장: 동작 (3초 polling + 1000포인트 샘플링)
+  - [정리화면에 반영]: 보류 (pyhwp가 rhwp export 못 읽음, UI 비활성화 처리)
 
 ### Infra
 - Docker Compose: PostgreSQL + MinIO + hwp-parser
@@ -166,6 +166,7 @@ Child  ✅
   id, user(FK), name, birthDate, gender, status, memo,
   createdAt, updatedAt
   status: ENROLLED | PENDING | GRADUATED | WITHDRAWN
+  - changeStatus(String) 도메인 메서드
 
 Classroom  ✅
   id, user(FK), year, name, status, createdAt, updatedAt
@@ -201,13 +202,34 @@ Observation  ⏳ 후순위
 
 ### 멀티유저 격리 패턴
 
-```java
-// 소유권 검증 (모든 도메인 Service 공통)
-private Child findOwnedChild(Long userId, Long childId) { ... }
-private Classroom findOwnedClassroom(Long userId, Long classroomId) { ... }
-private ActivityPlan findOwnedPlan(Long userId, Long planId) { ... }
+Repository 레벨에서 처음부터 격리. `findByIdAndUserId` 패턴으로 조회·소유권 검증을 한 쿼리로 처리.
 
-// 아카이브 상태 검증 (Classroom 전용)
+```java
+// Repository
+Optional<Child> findByIdAndUserId(Long id, Long userId);
+
+// Service
+private Child findOwnedChild(Long userId, Long childId) {
+    return childRepository.findByIdAndUserId(childId, userId)
+        .orElseThrow(() -> new BusinessException(CHILD_NOT_FOUND));
+}
+```
+
+**보안 정책**: 소유자가 다른 경우 FORBIDDEN이 아닌 NOT_FOUND를 던짐. 다른 사용자의 리소스 존재 여부조차 노출하지 않기 위함.
+
+**user 재조회 회피**: FK 저장 전용이라면 `userRepository.getReferenceById(userId)`로 프록시만 사용. 실제 DB 조회 안 함.
+
+```java
+public ChildResponse createChild(Long userId, ChildCreateRequest req) {
+    User userRef = userRepository.getReferenceById(userId);  // 프록시
+    Child child = Child.builder().user(userRef).name(req.getName()).build();
+    return ChildResponse.from(childRepository.save(child));
+}
+```
+
+### 아카이브 상태 검증 (Classroom 전용)
+
+```java
 private void validateNotArchived(Classroom c) {
     if (c.isArchived()) throw new BusinessException(ARCHIVED_CLASSROOM);
 }
@@ -221,7 +243,7 @@ private void validateNotArchived(Classroom c) {
 |-------|------|------|------|
 | **1** | 2026.05.26~05.28 | Docker / 인증 / 학교 검색 / React 인증 흐름 | ✅ |
 | **2** | 2026.05.29~ | Child·Classroom·Enrollment ✅ / 관찰일지(후순위) ⏳ | ✅ |
-| **3** | 2026.05.30~ | HWP 자동 분석 + 자동 등록 + rhwp 임베드 | 🔄 |
+| **3** | 2026.05.30~06.02 | HWP 자동 분석 + 자동 등록 + rhwp 임베드 | ✅ |
 | **4** | — | 추천형 에디터 / 반 복사·템플릿 / 통합 검색 / 모바일 | ⏳ |
 | **5** | — | AWS 배포 / 운영(HTTPS·CI) / 선생님 간 인계 | ⏳ |
 
@@ -249,7 +271,7 @@ private void validateNotArchived(Classroom c) {
 **Step 3-A — 메인 대시보드 캘린더 ✅** (2026-05-31~06-01)
 - AppLayout (헤더 + 사이드바 + 메인) + 라우팅
 - API 클라이언트 4종 (child, classroom, enrollment, activityPlan)
-- DashboardCalendar (FullCalendar 월 뷰)
+- DashboardCalendar (FullCalendar 월 뷰, lazy load)
 - ActivityDetailPanel (우측 슬라이드 패널)
 - 반·아이 필터
 
@@ -291,20 +313,20 @@ private void validateNotArchived(Classroom c) {
 - localStorage로 사용자 선호 기억
 - HWP 바이트 lazy load (첫 펼침 시점)
 
-**Step 3-E-2 — rhwp 편집 모드 + 자동 저장 ✅ (partial)** (2026-06-02)
+**Step 3-E-2 — rhwp 편집 모드 + 자동 저장 ✅ (정리화면 반영은 보류)** (2026-06-02)
 - 백엔드:
   - PUT /api/activity-plans/{id}/file (MinIO 파일 교체)
   - confirm API에 existingPlanId 지원 (기존 plan 업데이트 모드)
   - sections/montessori deleteBy 메서드 추가
 - 프론트:
   - RhwpEmbed에 editable + onChange (polling 방식)
-  - RhwpViewerPanel: [편집모드] 토글, 자동 저장, [정리화면에 반영] 버튼
+  - RhwpViewerPanel: [편집모드] 토글, 자동 저장
   - AnalysisConfirmModal에 existingPlanId prop
 - rhwp onChange 이벤트 없음 → 3초 setInterval + exportHwp 바이트 비교 (1000포인트 샘플링)
-- **막힘: [정리화면에 반영] 시 hwp-parser가 rhwp export 결과 못 읽음**
-  - 에러: 422 "변환 결과 HTML 파일 없음. 생성된 파일 목록: []"
-  - 원인: rhwp가 만든 HWP는 한컴 호환은 OK지만 pyhwp 사양은 통과 못 함
-  - rhwp 자체 export: HWP / HWPX / SVG만 (HTML/text/JSON 없음)
+- **[정리화면에 반영] 임시 비활성화**: pyhwp가 rhwp export 결과 못 읽음
+  - 버튼 disabled + 툴팁 "준비 중인 기능입니다"
+  - 하단 안내: "X초 전 자동 저장됨 (원본 파일만 갱신, 정리화면은 첫 업로드 기준)"
+  - Phase 4에서 @rhwp/core 활용해 본격 해결 예정
 
 **Step 3-E-2-a — @rhwp/core 탐색 ✅** (2026-06-02)
 - @rhwp/core v0.7.13 설치 (HwpDocument 약 150개 메서드)
@@ -315,12 +337,22 @@ private void validateNotArchived(Classroom c) {
   - 표 구조가 pyhwp와 다름: rhwp/core는 결제란+본문이 통합된 Table 0 (14×9, 35셀), Table 1 (3×2 방과후)
   - 셀 텍스트 추출 완벽: pyhwp와 일치
   - HTML 렌더링: renderPageHtml(0) 107,594자, (1) 43,034자
-- 막힘: **중첩 표(몬테소리) — getTableDimensionsByPath의 pathJson 형식 미확인, 부모 표 반복 반환**
+- 막힘: 중첩 표(몬테소리) — getTableDimensionsByPath의 pathJson 형식 미확인. Phase 4에서 본격 해결.
 
-**Step 3-E-2-b 이후 — 보류** (2026-06-02)
-- 결정: 길 C (지금 멈춤, Phase 3 일단 마무리, Phase 4 추천 에디터 작업 시 본격 해결)
-- 임시 처리: [정리화면에 반영] 버튼 비활성화 + 사용자 안내
-- 진짜 비전을 위한 정공법(@rhwp/core 활용)은 유지하되 시간 두고
+**Step 3 마무리 묶음 1 — 깔끔한 마무리 ✅** (2026-06-03)
+- 검색바 disabled 처리 (향후 통합 검색 활성화 대비)
+- 사이드바 "반 관리" 준비 중 비활성화 (클릭 자체 불가)
+- 중복 업로드 경고 (analyze 응답에 duplicateOfId, 모달 상단 노란 경고박스)
+- PENDING 일괄 처리 API (POST /pending/confirm-all, DELETE /pending)
+
+**Step 3 마무리 묶음 2 — 코드 품질 리팩토링 ✅** (2026-06-03)
+- Repository findByIdAndUserId 패턴 도입 (OwnershipValidator 대신)
+  - DB 쿼리 1번으로 조회 + 소유권 동시 처리
+  - 보안상 NOT_FOUND 통일 자동 달성
+- getReferenceById로 user 재조회 제거 (FK 전용 시)
+- FullCalendar lazy load
+  - 메인 번들: 787kB → 560kB (-29%)
+  - DashboardCalendar-*.js 227kB 별도 청크 분리
 
 ### Phase 3 설계 결정 (요약)
 1. 포맷: .hwp + .hwpx 둘 다 지원 (현재 .hwp만 구현, .hwpx는 TODO)
@@ -329,9 +361,10 @@ private void validateNotArchived(Classroom c) {
 4. DB: 완전 정규화 + rawJson 안전망
 5. 업로드 흐름: 2단계 (분석 → 팝업 → 확정 시 저장)
 6. 자동 등록: 반·아이·Enrollment 모두 자동, 아이는 PENDING으로
-7. rhwp 통합: 뷰어 임베드 ✅, 편집 + 자동 저장 ✅, 정리화면 반영 ❌ 임시 비활성화 (Phase 4에서 @rhwp/core 활용해 해결)
+7. rhwp 통합: 뷰어 임베드 ✅, 편집 + 자동 저장 ✅, 정리화면 반영 보류
 8. 편집 후 DB 처리: 사용자 명시적 트리거 ([정리화면에 반영]), 자동 저장은 파일만
 9. rhwp/core 도입: Phase 4 추천 에디터 비전과 일치, 단계적 활용
+10. 멀티유저 격리: Repository findByIdAndUserId 패턴, FORBIDDEN→NOT_FOUND 통일
 
 ### Phase 3에서 알게 된 것
 - HWP 양식은 글자 사이 공백이 흔함 ("일  시", "학 급 명") → 정규화 후 매칭 필수
@@ -345,6 +378,8 @@ private void validateNotArchived(Classroom c) {
 - **rhwp는 한컴 호환 OK, pyhwp 사양은 통과 못 함** → 편집 후 재분석은 hwp-parser 우회 필요
 - **rhwp onChange 이벤트 없음** → polling 3초 + 1000포인트 샘플링이 debounce 역할 겸함
 - **@rhwp/core의 표 구조는 pyhwp와 다름** (결제란이 본문에 통합) → 우리만의 매핑 전략 필요
+- **JPA getReferenceById**: FK 전용 시 user 재조회 회피 가능 (실제 필드 접근 시 LazyInitializationException 주의)
+- **React.lazy + Suspense**: 사용 페이지 한정 라이브러리는 lazy load로 메인 번들 다이어트
 
 ---
 
@@ -360,6 +395,8 @@ private void validateNotArchived(Classroom c) {
 
 ### 아이 (`/api/children/**`) — 인증 필수
 - POST `/`, GET `/` (?status=ENROLLED|PENDING|ALL), GET `/{childId}`, PUT `/{childId}`, DELETE `/{childId}`
+- **POST `/pending/confirm-all`** — PENDING 일괄 확정 ✨
+- **DELETE `/pending`** — PENDING 일괄 삭제 ✨
 
 ### 반 (`/api/classrooms/**`) — 인증 필수
 - POST `/`, GET `/?status=`, GET `/{id}`, PUT `/{id}`, DELETE `/{id}`
@@ -371,14 +408,14 @@ private void validateNotArchived(Classroom c) {
 
 ### 활동계획안 (`/api/activity-plans/**`) — 인증 필수
 - POST `/` (multipart) — HWP 업로드 (레거시, 자동 처리)
-- POST `/analyze` — 분석만 (DB 저장 X)
+- POST `/analyze` — 분석만 (DB 저장 X, 중복 감지 시 duplicateOfId/duplicateFileName 포함)
 - POST `/confirm` — 사용자 확정 후 저장 (existingPlanId 지원)
 - DELETE `/temp?fileKey=` — 거부 시 임시 파일 정리
 - GET `/` (?classroomId=, from=, to=) — 목록
 - GET `/{planId}` — 상세
 - DELETE `/{planId}` — 삭제 (MinIO 파일 동기 삭제)
 - GET `/{planId}/file` — 원본 HWP 다운로드
-- **PUT `/{planId}/file`** — 편집 후 파일 교체 (MinIO 덮어쓰기) ✨
+- PUT `/{planId}/file` — 편집 후 파일 교체 (MinIO 덮어쓰기)
 - GET `/children/{childId}/montessori` — 아이별 몬테소리 누적 이력
 
 ---
