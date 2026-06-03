@@ -50,7 +50,6 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - 선생님 간 데이터 인계 (현직장 인증 기반)
 - 활동계획안 "평가"·"확인" 칸 디지털 입력 기능 (HWP에선 비어있음)
 - 추천형 에디터 (코딩 IDE 자동완성처럼 과거 자료 기반 추천)
-- 활동계획안 편집 후 정리화면 반영 흐름 ([정리화면에 반영], 보류 중)
 - 반 관리 페이지 (현재 사이드바 "준비 중")
 
 ### UX
@@ -69,8 +68,6 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - rhwp 결제란 셀 병합 렌더링 버그 (upstream 모니터링)
 - rhwp "일일놀이실행안" 제목 미표시 (upstream 모니터링)
 - rhwp 중첩 표 내 행 추가/삭제 시 부모 표 영향
-- @rhwp/core의 pathJson 형식 발견 (Phase 4 추천 에디터에서 본격 해결)
-- renderPageHtml 우회 경로 검토 ([정리화면에 반영] 대안)
 
 ### 완료된 백로그 (참고)
 - ✅ FORBIDDEN→NOT_FOUND 통일 (묶음 2-K 작업으로 자연 해결)
@@ -79,6 +76,9 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - ✅ 코드 스플리팅 (FullCalendar 분리, 메인 번들 787kB→560kB)
 - ✅ PENDING 일괄 처리 API
 - ✅ 중복 업로드 경고
+- ✅ 활동계획안 편집 후 [정리화면에 반영] (Step 3-E-2-b-4, rhwp/core 완전 통합)
+- ✅ @rhwp/core pathJson 형식 발견·구현 (중첩 표 파싱, Step 3-E-2-b-1~b-2)
+- ✅ hwp-parser 폐기 + rhwp/core로 분석 통합 (성능 9.5배, Step 3-E-2-b-4)
 
 ---
 
@@ -105,15 +105,18 @@ IDE 린트       ↔   "이 아이는 이번 주 평가가 비어있어요" 알�
 - 작성 도구: Claude Code (VSCode)
 
 ### HWP 처리 (Phase 3)
-- **hwp-parser 컨테이너** ✅: Python 3.12 + FastAPI + pyhwp + BeautifulSoup
-  - Docker Compose 사이드카, 포트 8001
-  - POST /parse 엔드포인트: HWP/HWPX → 정규화 JSON
-  - 꿈열매유치원 양식 파싱 검증 완료 (CASE_5_8, CASE_5_26)
-- **rhwp 통합** ✅ Step 3-E-1, 🔄 Step 3-E-2:
+- **(폐기) hwp-parser 컨테이너**: Python 3.12 + FastAPI + pyhwp. Step 3-E-2-b-4에서 rhwp/core로 대체·삭제됨.
+- **@rhwp/core** ✅ HWP 분석 주체 (Step 3-E-2-b-4 통합):
+  - WASM 기반, 브라우저에서 직접 실행 (init 34ms + load 40ms = 74ms)
+  - `extractActivityPlan()`: 꿈열매유치원 양식 → ParsedActivityPlan
+  - 일관성 검증 통과: CASE_5_8 92항목 완전 일치 75% / 정규화 일치 21% / 불일치 4% (줄바꿈·null 패턴만)
+  - 성능: hwp-parser 712ms → rhwp/core 75ms (9.5배 향상)
+  - 보고서: mydocs/research/20260603-rhwp-core-consistency.md
+- **rhwp 통합** ✅ Step 3-E-1, ✅ Step 3-E-2:
   - 활동계획안 상세 페이지 우측 사이드 패널 (랜드마크 명세서 스타일)
   - 뷰어 모드: 동작
   - 편집 모드 + 자동 저장: 동작 (3초 polling + 1000포인트 샘플링)
-  - [정리화면에 반영]: 보류 (pyhwp가 rhwp export 못 읽음, UI 비활성화 처리)
+  - [정리화면에 반영]: ✅ 활성화 (rhwp/core로 재파싱 후 analyze API 호출)
 
 ### Infra
 - Docker Compose: PostgreSQL + MinIO + hwp-parser
@@ -192,7 +195,7 @@ ActivitySection  ✅
 MontessoriRecord  ✅
   id, activityPlan(FK),
   childNameRaw, child(FK, nullable, 자동 매칭),
-  area, material, confirmed
+  area, material, confirmed (@PrePersist로 null→"" 정규화)
 
 Observation  ⏳ 후순위
   id, childId, classroomId(참고), date, content,
@@ -243,7 +246,7 @@ private void validateNotArchived(Classroom c) {
 |-------|------|------|------|
 | **1** | 2026.05.26~05.28 | Docker / 인증 / 학교 검색 / React 인증 흐름 | ✅ |
 | **2** | 2026.05.29~ | Child·Classroom·Enrollment ✅ / 관찰일지(후순위) ⏳ | ✅ |
-| **3** | 2026.05.30~06.02 | HWP 자동 분석 + 자동 등록 + rhwp 임베드 | ✅ |
+| **3** | 2026.05.30~06.03 | HWP 자동 분석 + 자동 등록 + rhwp 임베드 + rhwp/core 통합 | ✅ |
 | **4** | — | 추천형 에디터 / 반 복사·템플릿 / 통합 검색 / 모바일 | ⏳ |
 | **5** | — | AWS 배포 / 운영(HTTPS·CI) / 선생님 간 인계 | ⏳ |
 
@@ -313,7 +316,7 @@ private void validateNotArchived(Classroom c) {
 - localStorage로 사용자 선호 기억
 - HWP 바이트 lazy load (첫 펼침 시점)
 
-**Step 3-E-2 — rhwp 편집 모드 + 자동 저장 ✅ (정리화면 반영은 보류)** (2026-06-02)
+**Step 3-E-2 — rhwp 편집 모드 + 자동 저장 + [정리화면에 반영] ✅** (2026-06-02~06-03)
 - 백엔드:
   - PUT /api/activity-plans/{id}/file (MinIO 파일 교체)
   - confirm API에 existingPlanId 지원 (기존 plan 업데이트 모드)
@@ -323,10 +326,7 @@ private void validateNotArchived(Classroom c) {
   - RhwpViewerPanel: [편집모드] 토글, 자동 저장
   - AnalysisConfirmModal에 existingPlanId prop
 - rhwp onChange 이벤트 없음 → 3초 setInterval + exportHwp 바이트 비교 (1000포인트 샘플링)
-- **[정리화면에 반영] 임시 비활성화**: pyhwp가 rhwp export 결과 못 읽음
-  - 버튼 disabled + 툴팁 "준비 중인 기능입니다"
-  - 하단 안내: "X초 전 자동 저장됨 (원본 파일만 갱신, 정리화면은 첫 업로드 기준)"
-  - Phase 4에서 @rhwp/core 활용해 본격 해결 예정
+- **[정리화면에 반영]**: ✅ Step 3-E-2-b-4에서 활성화 (rhwp/core로 재파싱 → analyze API 호출)
 
 **Step 3-E-2-a — @rhwp/core 탐색 ✅** (2026-06-02)
 - @rhwp/core v0.7.13 설치 (HwpDocument 약 150개 메서드)
@@ -337,7 +337,36 @@ private void validateNotArchived(Classroom c) {
   - 표 구조가 pyhwp와 다름: rhwp/core는 결제란+본문이 통합된 Table 0 (14×9, 35셀), Table 1 (3×2 방과후)
   - 셀 텍스트 추출 완벽: pyhwp와 일치
   - HTML 렌더링: renderPageHtml(0) 107,594자, (1) 43,034자
-- 막힘: 중첩 표(몬테소리) — getTableDimensionsByPath의 pathJson 형식 미확인. Phase 4에서 본격 해결.
+- → 중첩 표 pathJson 형식 미확인 → Step 3-E-2-b-1에서 해결
+
+**Step 3-E-2-b-1 — pathJson 형식 발견 ✅** (2026-06-03)
+- cellIdx=20 (row=6, col=4) 안에 중첩 표 18×4 존재
+- 2-레벨 pathJson 형식 확인: `[{controlIndex, cellIndex, cellParaIndex}, {controlIndex, cellIndex, cellParaIndex}]`
+- getTableDimensionsByPath / getCellParagraphCountByPath / getTextInCellByPath 동작 검증
+
+**Step 3-E-2-b-2 — rhwp/core 기반 파싱 모듈 ✅** (2026-06-03)
+- `frontend/src/lib/hwp/` 디렉토리 신규
+  - `extractor.ts`: HwpDocument → ParsedActivityPlan (+ `parseHwpFile()` 헬퍼)
+  - `parsers/metaParser.ts`, `sectionsParser.ts`, `montessoriParser.ts`
+  - `tableFinder.ts`, `categoryMapper.ts`, `types.ts`
+- 꿈열매유치원 양식 전용 (일반화는 Phase 4)
+- /_rhwp-core-test 페이지에 "양식 파싱 결과" 섹션 추가
+
+**Step 3-E-2-b-3 — 일관성 검증 ✅** (2026-06-03)
+- 검증 UI: `/_rhwp-consistency-test` 신규 페이지 (hwp-parser vs rhwp/core 나란히 비교)
+- CASE_5_8.hwp: 92항목 — 완전 일치 69 / 정규화 일치 19 / 불일치 4
+  - 불일치 4건: 모두 sections content의 줄바꿈 처리 차이 (내용 동일, 패턴 차이)
+  - 정규화 일치 19건: 모두 montessori confirmed의 null vs "" 차이
+  - 의미 있는 데이터 불일치 0건
+- 보고서: mydocs/research/20260603-rhwp-core-consistency.md
+- 판정: rhwp/core 결과 채택, 통합 진행
+
+**Step 3-E-2-b-4 — rhwp/core 완전 통합 + hwp-parser 폐기 ✅** (2026-06-03)
+- 삭제: hwp-parser/ 디렉토리, HwpParserClient.java, HwpParseResponse.java, docker-compose hwp-parser 서비스
+- 신규: `dto/analyze/FrontendParsedPlan.java` (프론트 파싱 결과 수신 DTO)
+- analyze API 변경: multipart에 `file` + `parsed`(JSON Blob) 함께 수신, 백엔드는 자동 매칭·중복 감지만
+- MontessoriRecord @PrePersist: confirmed null → "" 정규화
+- [정리화면에 반영] 버튼 활성화 (RhwpViewerPanel)
 
 **Step 3 마무리 묶음 1 — 깔끔한 마무리 ✅** (2026-06-03)
 - 검색바 disabled 처리 (향후 통합 검색 활성화 대비)
@@ -361,9 +390,9 @@ private void validateNotArchived(Classroom c) {
 4. DB: 완전 정규화 + rawJson 안전망
 5. 업로드 흐름: 2단계 (분석 → 팝업 → 확정 시 저장)
 6. 자동 등록: 반·아이·Enrollment 모두 자동, 아이는 PENDING으로
-7. rhwp 통합: 뷰어 임베드 ✅, 편집 + 자동 저장 ✅, 정리화면 반영 보류
+7. rhwp 통합: 뷰어 임베드 ✅, 편집 + 자동 저장 ✅, 정리화면 반영 ✅
 8. 편집 후 DB 처리: 사용자 명시적 트리거 ([정리화면에 반영]), 자동 저장은 파일만
-9. rhwp/core 도입: Phase 4 추천 에디터 비전과 일치, 단계적 활용
+9. rhwp/core 도입: 완전 통합 완료 (hwp-parser 폐기). Phase 4 추천 에디터에서 본격 확장 예정
 10. 멀티유저 격리: Repository findByIdAndUserId 패턴, FORBIDDEN→NOT_FOUND 통일
 
 ### Phase 3에서 알게 된 것
@@ -375,11 +404,15 @@ private void validateNotArchived(Classroom c) {
 - **MultipartFile은 한 번만 읽힘** → byte[]로 미리 보관해 MinIO·hwp-parser에 재사용
 - 활동계획안의 "평가" 칸·몬테소리 "확인" 칸은 보통 비어있음 → 현장에서 디지털 입력 기능 가치 큼
 - confirm 단계에서 재파싱 안 함 → sections/montessori를 프론트에서 그대로 전달해 hwp-parser 2중 호출 방지
-- **rhwp는 한컴 호환 OK, pyhwp 사양은 통과 못 함** → 편집 후 재분석은 hwp-parser 우회 필요
+- **rhwp는 한컴 호환 OK, pyhwp 사양은 통과 못 함** → 편집 후 재분석은 rhwp/core로 해결 (Step 3-E-2-b-4)
 - **rhwp onChange 이벤트 없음** → polling 3초 + 1000포인트 샘플링이 debounce 역할 겸함
-- **@rhwp/core의 표 구조는 pyhwp와 다름** (결제란이 본문에 통합) → 우리만의 매핑 전략 필요
+- **@rhwp/core의 표 구조는 pyhwp와 다름** (결제란이 본문에 통합) → 우리만의 셀 매핑 전략으로 해결
 - **JPA getReferenceById**: FK 전용 시 user 재조회 회피 가능 (실제 필드 접근 시 LazyInitializationException 주의)
 - **React.lazy + Suspense**: 사용 페이지 한정 라이브러리는 lazy load로 메인 번들 다이어트
+- **pathJson은 2-레벨 배열**: `[{controlIndex, cellIndex, cellParaIndex}, {controlIndex, cellIndex, cellParaIndex}]` — 외부 표 진입 후 중첩 표 진입하는 2단계 경로
+- **rhwp/core vs pyhwp 일관성**: 줄바꿈 방식·null 처리만 다르고 의미 데이터는 완전 동일 (92항목 검증)
+- **analyze API에서 파싱 분리**: 백엔드는 매칭·중복 감지만, 파싱 주체를 프론트로 이동 시 712ms → 75ms
+- **@RequestPart + JSON Blob**: `formData.append('parsed', new Blob([JSON.stringify(obj)], {type:'application/json'}))` → Spring `@RequestPart(name="parsed") MyDto` 로 역직렬화
 
 ---
 
@@ -407,8 +440,8 @@ private void validateNotArchived(Classroom c) {
 - GET `/children/{childId}`, GET `/classrooms/{classroomId}`
 
 ### 활동계획안 (`/api/activity-plans/**`) — 인증 필수
-- POST `/` (multipart) — HWP 업로드 (레거시, 자동 처리)
-- POST `/analyze` — 분석만 (DB 저장 X, 중복 감지 시 duplicateOfId/duplicateFileName 포함)
+- POST `/analyze` (multipart: file + parsed JSON) — 분석만 (DB 저장 X, 중복 감지 시 duplicateOfId/duplicateFileName 포함)
+  - `parsed`: 프론트 extractActivityPlan() 결과, Content-Type: application/json
 - POST `/confirm` — 사용자 확정 후 저장 (existingPlanId 지원)
 - DELETE `/temp?fileKey=` — 거부 시 임시 파일 정리
 - GET `/` (?classroomId=, from=, to=) — 목록
@@ -423,15 +456,15 @@ private void validateNotArchived(Classroom c) {
 ## 7. 환경 & 운영
 
 - 루트: `C:\Users\SSAFY\git\teachersDrawer` (집: `C:\Users\jhsun\teachersDrawer`)
-- 구조: `backend/`, `frontend/`, `hwp-parser/`, `samples/hwp/`, `mydocs/orders/`, `mydocs/history/`, `mydocs/research/`, `docker-compose.yml`, `PROJECT.md`, `README.md`
+- 구조: `backend/`, `frontend/`, `samples/hwp/`, `mydocs/orders/`, `mydocs/history/`, `mydocs/research/`, `docker-compose.yml`, `PROJECT.md`, `README.md`
 - GitHub: `sienhs`, `main`
 - IDE: STS(백) + VSCode·Claude Code(프론트·파서·복잡 작업) + Thunder Client
 
 ### Docker 서비스
 - `postgres` (PostgreSQL 16) — 5432
 - `minio` (스토리지) — 9000(API), 9001(Console)
-- `hwp-parser` (Python FastAPI) — 8001
 - 모두 `drawer-network`. backend 추가 시 `docker` 프로파일 활성화.
+- ~~`hwp-parser`~~ Step 3-E-2-b-4에서 제거됨 (rhwp/core로 대체)
 
 ### 알려진 환경 이슈 / 교훈
 - STS 자체 컴파일러가 `-parameters` 무시 → `@RequestParam`/`@PathVariable`/`@Qualifier` 이름 명시 필수

@@ -2,14 +2,14 @@
 
 유치원·초중고 교사를 위한 업무 관리 웹 서비스. **HWP 활동계획안을 자동으로 분석·구조화**하고, 반·아이·반배정·아이별 활동 누적 기록을 한 곳에서 관리한다.
 
-> 본 프로젝트는 현재 개발 진행 중인 미공개 프로젝트입니다. 인증·학교 검색·아이/반/반배정 관리·HWP 자동 분석·rhwp 임베드 뷰어·편집까지 구현되어 있으며, 핵심 기능은 계속 추가되고 있습니다. 문서에 기재된 API와 구조는 진행에 따라 변경될 수 있습니다.
+> 본 프로젝트는 현재 개발 진행 중인 미공개 프로젝트입니다. 인증·학교 검색·아이/반/반배정 관리·HWP 자동 분석·rhwp 임베드 뷰어·편집·정리화면 반영까지 구현되어 있으며, 핵심 기능은 계속 추가되고 있습니다. 문서에 기재된 API와 구조는 진행에 따라 변경될 수 있습니다.
 
 ## 핵심 가치
 
 - **HWP 활동계획안 자동 분석**: 한컴오피스 파일을 업로드하면 시간대별 활동·아이별 몬테소리 활동을 자동 추출해 DB에 정규화 저장
 - **아이 자동 등록**: HWP 안의 아이 이름·반·담임을 인식해 PENDING으로 자동 등록, 사용자가 확인만 하면 끝
 - **아이별 누적 추적**: 한 아이가 여러 활동계획안에 등장하면 캘린더에 자동 누적 표시
-- **HWP 원본 보존 + 웹 편집**: 페이지 안에 한컴오피스 같은 편집기 임베드 (rhwp). 편집 후 export 시 한컴오피스 호환
+- **HWP 원본 보존 + 웹 편집**: 페이지 안에 한컴오피스 같은 편집기 임베드 (rhwp). 편집 후 export 시 한컴오피스 호환. 편집 내용을 정리화면(DB)에 반영 가능
 
 ## 기술 스택
 
@@ -26,15 +26,16 @@
 - Tailwind CSS 4 (베이지 + 주황 토스풍)
 - Zustand, Axios, React Router 7
 - FullCalendar (월 뷰, lazy load), react-calendar (미니), react-dropzone
-- `@rhwp/editor`, `@rhwp/core` (Rust + WebAssembly 기반 HWP 에디터/파서)
+- `@rhwp/editor` (iframe 기반 HWP 에디터 — 뷰어 + 편집 + Export)
+- `@rhwp/core` (WASM HWP 파서 — 브라우저에서 직접 파싱, 75ms)
 
 ### HWP 처리
-- **hwp-parser 컨테이너**: Python 3.12 + FastAPI + pyhwp + BeautifulSoup
-- POST /parse 엔드포인트로 HWP → 정규화 JSON 변환
-- 꿈열매유치원 양식 검증 완료, LLM 기반 양식 일반화는 후속 단계
+- **@rhwp/core**: Rust + WebAssembly 기반. 브라우저에서 직접 HWP 파싱 (init 34ms + load 40ms)
+- 업로드 시 프론트엔드에서 먼저 파싱 → 백엔드에 파싱 결과 전달 (Python 의존성 없음)
+- 꿈열매유치원 양식 검증 완료. 일관성 검증: hwp-parser 대비 의미 데이터 완전 동일
 
 ### Infra
-- Docker Compose: PostgreSQL, MinIO, hwp-parser
+- Docker Compose: PostgreSQL, MinIO
 - 외부 연동: NEIS 교육정보 API, 유치원알리미(e-childschoolinfo) API
 - 배포 목표: AWS
 
@@ -48,7 +49,7 @@ Client (axios)
   → Controller (요청 검증 / 응답 래핑)
   → Service (비즈니스 로직 / 트랜잭션)
   → Repository (JPA) · 외부 API Client
-  → DB(PostgreSQL) · NEIS / 유치원알리미 · MinIO · hwp-parser
+  → DB(PostgreSQL) · NEIS / 유치원알리미 · MinIO
 ```
 
 모든 응답은 `ApiResponse<T>` 한 가지 포맷으로 통일되며, 구조는 `{ success, message, data }` 입니다. 예외는 `GlobalExceptionHandler`가 잡아 동일 포맷으로 변환합니다.
@@ -56,16 +57,30 @@ Client (axios)
 ### HWP 업로드 흐름 (2단계)
 
 ```
-1. POST /api/activity-plans/analyze (multipart)
-   → MinIO 임시 저장 + hwp-parser 호출 + 자동 매칭 시도 (DB 저장 X)
-   → 분석 결과 응답: 반/아이/활동 미리보기 + 중복 감지
-2. 사용자가 모달에서 확인
-3. POST /api/activity-plans/confirm (분석 결과 + 사용자 결정)
+1. 파일 선택 → 프론트엔드에서 @rhwp/core로 파싱 (75ms)
+   → ParsedActivityPlan (메타 6개 + sections 11개 + 몬테소리 기록)
+
+2. POST /api/activity-plans/analyze (multipart: file + parsed JSON)
+   → MinIO 임시 저장 + 자동 매칭 (반/아이) + 중복 감지
+   → 분석 결과 응답: 반/아이/활동 미리보기
+
+3. 사용자가 모달에서 확인 (자동 매칭 결과 검토, 동명이인 처리)
+
+4. POST /api/activity-plans/confirm (분석 결과 + 사용자 결정)
    → 반/아이(PENDING)/Enrollment 자동 생성 + ActivityPlan 저장
    → DB 갱신 모드(existingPlanId)도 지원
 ```
 
 분석에서 매칭 못 한 아이는 **PENDING 상태**로 자동 등록되어 사용자가 아이 관리 페이지에서 일괄 확정/삭제할 수 있습니다.
+
+### [정리화면에 반영] 흐름
+
+```
+상세 페이지 → 편집 모드 ON → 텍스트 편집 → 3초 자동 저장 (MinIO 파일만 갱신)
+→ [정리화면에 반영] 클릭
+→ 프론트에서 @rhwp/core로 현재 파일 재파싱
+→ POST /analyze → 모달 → [수락하고 저장] → DB 갱신
+```
 
 ### 인증 흐름 (Spring Security + JWT)
 
@@ -109,7 +124,7 @@ Client (axios)
 - POST `/`, DELETE `/{id}`, GET `/children/{childId}`, GET `/classrooms/{classroomId}`
 
 ### 활동계획안 (`/api/activity-plans/**`) — 인증 필수
-- POST `/analyze` — 분석만 (DB 저장 X, 중복 감지 포함)
+- POST `/analyze` (multipart: file + parsed JSON) — 분석만 (DB 저장 X, 중복 감지 포함)
 - POST `/confirm` — 사용자 확정 후 저장 (신규/업데이트 모드)
 - DELETE `/temp?fileKey=` — 거부 시 정리
 - GET `/`, GET `/{id}`, DELETE `/{id}`
@@ -162,10 +177,10 @@ teachersDrawer
 │   └── src
 │       ├── api                # axios instance, API clients
 │       ├── components         # 공통 컴포넌트 (Layout, activityPlan 등)
+│       ├── lib/hwp            # @rhwp/core 기반 HWP 파싱 모듈
 │       ├── pages              # dashboard, activityPlan, children, auth
 │       ├── store              # Zustand authStore
 │       └── types
-├── hwp-parser               # Python FastAPI + pyhwp (HWP 파싱 사이드카)
 ├── samples/hwp              # 검증용 HWP 샘플
 ├── mydocs                   # 기획·작업 지시서·연구 보고서
 ├── docker-compose.yml
@@ -186,7 +201,6 @@ docker-compose up -d
 ```
 - PostgreSQL: `localhost:5432`
 - MinIO API: `localhost:9000`, Console: `localhost:9001`
-- hwp-parser: `localhost:8001`
 
 ### 백엔드 실행
 ```bash
@@ -202,29 +216,6 @@ npm install
 npm run dev
 ```
 Frontend: http://localhost:5173
-
-### hwp-parser 단독 실행 및 테스트
-
-#### 컨테이너만 띄우기
-```bash
-docker-compose up -d hwp-parser
-curl http://localhost:8001/health   # {"status":"ok"}
-```
-
-#### HWP 파일 파싱
-```bash
-curl -X POST http://localhost:8001/parse \
-  -F "file=@samples/hwp/CASE_5_8.hwp"
-```
-
-#### 로컬 단위 테스트 (Docker 없이)
-```bash
-cd hwp-parser
-pip install -r requirements.txt
-pytest tests/ -v
-# 또는 SAMPLES_DIR 지정
-SAMPLES_DIR=/path/to/hwp pytest tests/ -v
-```
 
 ## 환경 설정 주의
 
