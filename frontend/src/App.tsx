@@ -16,6 +16,7 @@ import ChildrenManagePage from './pages/children/ChildrenManagePage';
 import ComingSoonPage from './pages/placeholder/ComingSoonPage';
 import RhwpTestPage from './pages/devtest/RhwpTestPage';
 import RhwpCoreTestPage from './pages/devtest/RhwpCoreTestPage';
+import RhwpConsistencyTestPage from './pages/devtest/RhwpConsistencyTestPage';
 
 function App() {
   const [isRestoring, setIsRestoring] = useState(true);
@@ -86,6 +87,7 @@ function App() {
         {/* 개발 도구 — 숨김 라우팅, 사이드바 미표시 */}
         <Route path="/_rhwp-test" element={<RhwpTestPage />} />
         <Route path="/_rhwp-core-test" element={<RhwpCoreTestPage />} />
+        <Route path="/_rhwp-consistency-test" element={<RhwpConsistencyTestPage />} />
 
         {/* 알 수 없는 경로 → 대시보드 */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

@@ -9,6 +9,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -41,4 +43,12 @@ public class MontessoriRecord {
     private String area;
     private String material;
     private String confirmed;
+
+    @PrePersist
+    @PreUpdate
+    private void normalizeConfirmed() {
+        if (this.confirmed == null) {
+            this.confirmed = "";
+        }
+    }
 }

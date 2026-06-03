@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import com.teachersdrawer.backend.domain.activityPlan.client.HwpParserClient;
 import com.teachersdrawer.backend.domain.activityPlan.dto.ActivityPlanResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.ActivityPlanSummaryResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.ActivitySectionResponse;
@@ -21,10 +20,9 @@ import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.ActivityPlanAn
 import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.ChildMatchResult;
 import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.ClassroomMatchResult;
 import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.DuplicateCandidateResult;
+import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.FrontendParsedPlan;
 import com.teachersdrawer.backend.domain.activityPlan.dto.confirm.ActivityPlanConfirmRequest;
 import com.teachersdrawer.backend.domain.activityPlan.dto.confirm.ChildActionRequest;
-import com.teachersdrawer.backend.domain.activityPlan.dto.parser.HwpParseResponse;
-import com.teachersdrawer.backend.domain.activityPlan.dto.parser.ParsedMetadata;
 import com.teachersdrawer.backend.domain.activityPlan.dto.parser.ParsedMontessoriRecord;
 import com.teachersdrawer.backend.domain.activityPlan.dto.parser.ParsedSection;
 import com.teachersdrawer.backend.domain.activityPlan.entity.ActivityPlan;
@@ -62,119 +60,8 @@ public class ActivityPlanService {
     private final ChildRepository childRepository;
     private final EnrollmentRepository enrollmentRepository;
     private final FileStorageService fileStorageService;
-    private final HwpParserClient hwpParserClient;
 
     public record FileDownload(byte[] bytes, String fileName) {}
-
-    // ---- 업로드 ----
-
-    @Transactional
-    public ActivityPlanResponse upload(Long userId, MultipartFile file, Long classroomId) {
-        String originalFilename = file.getOriginalFilename();
-        validateHwpExtension(originalFilename);
-
-        // MultipartFile은 한 번만 읽을 수 있으므로 미리 byte[]로 읽어둠
-        byte[] fileBytes;
-        try {
-            fileBytes = file.getBytes();
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
-        }
-
-        // classroomId 소유권·아카이브 검증
-        Classroom classroom = null;
-        if (classroomId != null) {
-            classroom = classroomRepository.findByIdAndUserId(classroomId, userId)
-                    .orElseThrow(() -> new BusinessException(ErrorCode.CLASSROOM_NOT_FOUND));
-            if (classroom.isArchived()) {
-                throw new BusinessException(ErrorCode.ARCHIVED_CLASSROOM);
-            }
-        }
-
-        // MinIO 업로드 (userId 포함 prefix로 소유권 격리)
-        String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
-        String fileKey = fileStorageService.upload(fileBytes, originalFilename, contentType, "activity-plans/" + userId + "/");
-
-        // hwp-parser 호출 (업로드한 byte[] 재사용)
-        HwpParseResponse parseResponse;
-        try {
-            parseResponse = hwpParserClient.parse(fileBytes, originalFilename);
-        } catch (BusinessException e) {
-            // 파싱 실패 시 MinIO에 저장된 파일 롤백
-            try { fileStorageService.delete(fileKey); } catch (Exception ex) {
-                log.warn("파싱 실패 후 MinIO 파일 삭제 실패: {}", ex.getMessage());
-            }
-            throw e;
-        }
-
-        ParsedMetadata meta = parseResponse.getMetadata();
-
-        // classroomId 없으면 classNameRaw로 ACTIVE 반 자동 매칭 시도
-        if (classroom == null && meta != null && meta.getClassNameRaw() != null) {
-            classroom = classroomRepository.findByUserIdAndStatusOrderByYearDesc(userId, "ACTIVE")
-                    .stream()
-                    .filter(c -> c.getName().equals(meta.getClassNameRaw()))
-                    .findFirst()
-                    .orElse(null);
-        }
-
-        User user = userRepository.getReferenceById(userId);
-
-        ActivityPlan plan = ActivityPlan.builder()
-                .user(user)
-                .classroom(classroom)
-                .planDate(meta != null && meta.getPlanDate() != null ? meta.getPlanDate() : LocalDate.now())
-                .subject(meta != null ? meta.getSubject() : null)
-                .teacherName(meta != null ? meta.getTeacherName() : null)
-                .classNameRaw(meta != null ? meta.getClassNameRaw() : null)
-                .classTimeRaw(meta != null ? meta.getClassTimeRaw() : null)
-                .classDayCount(meta != null ? meta.getClassDayCount() : null)
-                .fileKey(fileKey)
-                .fileName(originalFilename)
-                .rawJson(parseResponse.getRawJson())
-                .build();
-
-        plan = activityPlanRepository.save(plan);
-
-        // sections 저장
-        List<ActivitySection> sections = new ArrayList<>();
-        if (parseResponse.getSections() != null) {
-            for (ParsedSection ps : parseResponse.getSections()) {
-                sections.add(ActivitySection.builder()
-                        .activityPlan(plan)
-                        .orderIndex(ps.getOrderIndex())
-                        .label(ps.getLabel())
-                        .content(ps.getContent())
-                        .category(parseSectionCategory(ps.getCategory()))
-                        .build());
-            }
-            activitySectionRepository.saveAll(sections);
-        }
-
-        // MontessoriRecords 저장 (아이 자동 매칭)
-        List<MontessoriRecord> records = new ArrayList<>();
-        if (parseResponse.getMontessoriRecords() != null) {
-            for (ParsedMontessoriRecord pmr : parseResponse.getMontessoriRecords()) {
-                Child matchedChild = null;
-                if (pmr.getChildNameRaw() != null) {
-                    matchedChild = childRepository
-                            .findFirstByUserIdAndStatusAndName(userId, "ENROLLED", pmr.getChildNameRaw().trim())
-                            .orElse(null);
-                }
-                records.add(MontessoriRecord.builder()
-                        .activityPlan(plan)
-                        .childNameRaw(pmr.getChildNameRaw())
-                        .child(matchedChild)
-                        .area(pmr.getArea())
-                        .material(pmr.getMaterial())
-                        .confirmed(pmr.getConfirmed())
-                        .build());
-            }
-            montessoriRecordRepository.saveAll(records);
-        }
-
-        return buildResponse(plan, sections, records);
-    }
 
     // ---- 목록 조회 ----
 
@@ -249,7 +136,6 @@ public class ActivityPlanService {
     // ---- 아이별 몬테소리 이력 ----
 
     public List<MontessoriRecordResponse> getChildMontessoriHistory(Long userId, Long childId) {
-        // 소유권 검증
         Child child = childRepository.findById(childId)
                 .orElseThrow(() -> new BusinessException(ErrorCode.CHILD_NOT_FOUND));
         if (!child.getUser().getId().equals(userId)) {
@@ -261,10 +147,10 @@ public class ActivityPlanService {
                 .toList();
     }
 
-    // ---- 분석 (DB 저장 X) ----
+    // ---- 분석 (DB 저장 X) — 프론트에서 rhwp/core로 파싱한 결과를 받아 자동 매칭/중복 감지만 수행 ----
 
     @Transactional
-    public ActivityPlanAnalysisResponse analyze(Long userId, MultipartFile file, Long classroomId) {
+    public ActivityPlanAnalysisResponse analyze(Long userId, MultipartFile file, FrontendParsedPlan parsed, Long classroomId) {
         String originalFilename = file.getOriginalFilename();
         validateHwpExtension(originalFilename);
 
@@ -275,24 +161,12 @@ public class ActivityPlanService {
             throw new BusinessException(ErrorCode.FILE_STORAGE_ERROR);
         }
 
-        // MinIO에 업로드 (userId 포함 prefix)
+        // MinIO에 임시 업로드 (confirm/cancelTemp에서 처리)
         String contentType = file.getContentType() != null ? file.getContentType() : "application/octet-stream";
         String fileKey = fileStorageService.upload(fileBytes, originalFilename, contentType, "activity-plans/" + userId + "/");
 
-        // hwp-parser 호출
-        HwpParseResponse parsed;
-        try {
-            parsed = hwpParserClient.parse(fileBytes, originalFilename);
-        } catch (BusinessException e) {
-            try { fileStorageService.delete(fileKey); } catch (Exception ex) {
-                log.warn("파싱 실패 후 MinIO 파일 삭제 실패: {}", ex.getMessage());
-            }
-            throw e;
-        }
-
-        ParsedMetadata meta = parsed.getMetadata();
-        LocalDate planDate = meta != null && meta.getPlanDate() != null ? meta.getPlanDate() : LocalDate.now();
-        String nameFromHwp = meta != null ? meta.getClassNameRaw() : null;
+        LocalDate planDate = parsed.getPlanDate() != null ? parsed.getPlanDate() : LocalDate.now();
+        String nameFromHwp = parsed.getClassNameRaw();
 
         // 반 매칭
         ClassroomMatchResult classroomMatch = matchClassroom(userId, nameFromHwp, planDate);
@@ -326,11 +200,11 @@ public class ActivityPlanService {
                 .fileKey(fileKey)
                 .fileName(originalFilename)
                 .planDate(planDate)
-                .subject(meta != null ? meta.getSubject() : null)
-                .teacherName(meta != null ? meta.getTeacherName() : null)
-                .classNameRaw(meta != null ? meta.getClassNameRaw() : null)
-                .classTimeRaw(meta != null ? meta.getClassTimeRaw() : null)
-                .classDayCount(meta != null ? meta.getClassDayCount() : null)
+                .subject(parsed.getSubject())
+                .teacherName(parsed.getTeacherName())
+                .classNameRaw(parsed.getClassNameRaw())
+                .classTimeRaw(parsed.getClassTimeRaw())
+                .classDayCount(parsed.getClassDayCount())
                 .classroom(classroomMatch)
                 .children(childMatches)
                 .sections(parsed.getSections() != null ? parsed.getSections() : List.of())
@@ -345,7 +219,6 @@ public class ActivityPlanService {
 
     @Transactional
     public ActivityPlanResponse confirm(Long userId, ActivityPlanConfirmRequest req) {
-        // fileKey 소유권 검증
         if (!req.getFileKey().startsWith("activity-plans/" + userId + "/")) {
             throw new BusinessException(ErrorCode.FORBIDDEN);
         }
@@ -389,7 +262,7 @@ public class ActivityPlanService {
             // 기존 plan 업데이트 모드
             plan = findOwnedPlan(userId, req.getExistingPlanId());
 
-            // analyze에서 생성된 임시 파일 삭제 (기존 fileKey는 PUT file로 이미 교체됨)
+            // analyze에서 생성된 임시 파일 삭제
             try {
                 fileStorageService.delete(req.getFileKey());
             } catch (Exception e) {
@@ -400,13 +273,12 @@ public class ActivityPlanService {
             montessoriRecordRepository.deleteByActivityPlanId(plan.getId());
             activitySectionRepository.deleteByActivityPlanId(plan.getId());
 
-            // 메타데이터 갱신 (fileKey/fileName은 그대로 유지)
             plan.updateContent(req.getPlanDate(), req.getSubject(), req.getTeacherName(),
                     req.getClassNameRaw(), req.getClassTimeRaw(), req.getClassDayCount(),
                     req.getRawJson(), classroom);
             plan = activityPlanRepository.save(plan);
         } else {
-            // 신규 생성 (기존 로직)
+            // 신규 생성
             plan = activityPlanRepository.save(ActivityPlan.builder()
                     .user(user)
                     .classroom(classroom)
@@ -506,19 +378,16 @@ public class ActivityPlanService {
     private List<ChildMatchResult> matchChildren(Long userId, List<String> names) {
         List<ChildMatchResult> results = new ArrayList<>();
         for (String name : names) {
-            // ENROLLED 정확 매칭 우선
             var exact = childRepository.findFirstByUserIdAndStatusAndName(userId, "ENROLLED", name);
             if (exact.isPresent()) {
                 results.add(ChildMatchResult.useExisting(exact.get()));
                 continue;
             }
-            // PENDING도 정확 매칭이면 자동 처리 (같은 HWP 재업로드 시 중복 방지)
             var pending = childRepository.findFirstByUserIdAndStatusAndName(userId, "PENDING", name);
             if (pending.isPresent()) {
                 results.add(ChildMatchResult.useExisting(pending.get()));
                 continue;
             }
-            // 동명이인 후보: GRADUATED/WITHDRAWN만 표시 (PENDING은 위에서 자동 처리됨)
             List<Child> candidates = childRepository.findByUserIdAndName(userId, name)
                     .stream()
                     .filter(c -> "GRADUATED".equals(c.getStatus()) || "WITHDRAWN".equals(c.getStatus()))

@@ -7,6 +7,7 @@ import type {
   ActivityPlanSummary,
   MontessoriHistoryItem,
 } from '../types/activityPlan';
+import type { ParsedActivityPlan } from '../lib/hwp/types';
 
 export interface ActivityPlanListParams {
   classroomId?: number;
@@ -36,20 +37,6 @@ export const activityPlanApi = {
       .get<ApiResponse<ActivityPlanDetail>>(`/api/activity-plans/${id}`)
       .then((r) => r.data.data),
 
-  // 업로드는 multipart/form-data; 성공 시 ActivityPlanDetail (id 포함)
-  upload: (file: File, classroomId?: number) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    if (classroomId != null) {
-      formData.append('classroomId', String(classroomId));
-    }
-    return api
-      .post<ApiResponse<ActivityPlanDetail>>('/api/activity-plans', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((r) => r.data.data);
-  },
-
   delete: (id: number) =>
     api.delete<ApiResponse<void>>(`/api/activity-plans/${id}`).then((r) => r.data.data),
 
@@ -72,10 +59,11 @@ export const activityPlanApi = {
       )
       .then((r) => r.data.data),
 
-  // HWP 분석 (DB 저장 X — 팝업용)
-  analyze: (file: File, classroomId?: number) => {
+  // HWP 분석 (DB 저장 X — 팝업용) — parsed는 프론트 rhwp/core 파싱 결과
+  analyze: (file: File, parsed: ParsedActivityPlan, classroomId?: number) => {
     const form = new FormData();
     form.append('file', file);
+    form.append('parsed', new Blob([JSON.stringify(parsed)], { type: 'application/json' }));
     if (classroomId != null) form.append('classroomId', String(classroomId));
     return api
       .post<ApiResponse<ActivityPlanAnalysis>>('/api/activity-plans/analyze', form, {

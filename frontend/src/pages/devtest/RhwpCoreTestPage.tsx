@@ -4,6 +4,8 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import init, { HwpDocument } from '@rhwp/core';
+import { extractActivityPlan } from '../../lib/hwp/extractor';
+import type { ParsedActivityPlan } from '../../lib/hwp/types';
 
 // ── WASM 초기화 전 필수: 텍스트 폭 측정 콜백 등록 ───────────────────────
 let _ctx: CanvasRenderingContext2D | null = null;
@@ -54,6 +56,24 @@ interface NestedTableInfo {
   cells: CellInfo[];
 }
 
+// ── pathJson 테스트 타입 (Step 3-E-2-b-1) ────────────────────────────────
+interface PathAttempt {
+  path: string;
+  result?: { rowCount: number; colCount: number; cellCount: number };
+  error?: string;
+  success: boolean; // outer table(14×9)와 다른 결과
+}
+
+interface PathJsonTestResult {
+  outerDims: { rowCount: number; colCount: number; cellCount: number } | null;
+  montessoriCellIdx: number;     // row=6, col=1 의 cellIdx (-1이면 미발견)
+  montessoriCellInfo: unknown;
+  montessoriCellParaCount: number;
+  attempts: PathAttempt[];
+  successPath: string | null;    // 성공한 path (있으면)
+  layerTreeHint: string;         // getPageLayerTree에서 "Table" 포함 여부 요약
+}
+
 interface ExplorationResult {
   wasmInitMs: number;
   docLoadMs: number;
@@ -66,6 +86,9 @@ interface ExplorationResult {
   pageTextLayouts: Record<number, unknown>;
   tables: TableInfo[];
   nestedTables: NestedTableInfo[];
+  pathJsonTest: PathJsonTestResult | null;
+  parsed: ParsedActivityPlan | null;
+  parseError: string | null;
   errors: string[];
 }
 
@@ -99,6 +122,9 @@ async function exploreDocument(bytes: Uint8Array): Promise<ExplorationResult> {
     pageTextLayouts: {},
     tables: [],
     nestedTables: [],
+    pathJsonTest: null,
+    parsed: null,
+    parseError: null,
     errors,
   };
 
@@ -198,6 +224,179 @@ async function exploreDocument(bytes: Uint8Array): Promise<ExplorationResult> {
         result.nestedTables.push(...nestedTables);
       }
     }
+  }
+
+  // ── pathJson 형식 발견 테스트 (Step 3-E-2-b-1) ─────────────────────────
+  // 발견된 결론 (2026-06-03):
+  //   - 몬테소리 학생 기록 표: cellIdx=20 (row=6, col=4, colSpan=5) 안에 존재
+  //   - 2-레벨 path 필요: [{ctrl:0, cell:20, para:0}, {ctrl:0, cell:X, para:0}]
+  //   - 형식 출처: getCursorRectByPath 주석
+  //     [{"controlIndex":N,"cellIndex":N,"cellParaIndex":N}, ...]
+  // 외부 표: sec=0, para=1, ctrl=0 (14×9, 35셀)
+  try {
+    const pTest: PathJsonTestResult = {
+      outerDims: null,
+      montessoriCellIdx: -1,
+      montessoriCellInfo: null,
+      montessoriCellParaCount: 0,
+      attempts: [],
+      successPath: null,
+      layerTreeHint: '',
+    };
+
+    // 외부 표 차원 (비교 기준)
+    try {
+      pTest.outerDims = JSON.parse(doc.getTableDimensions(0, 1, 0));
+    } catch (e) { errors.push(`outerDims: ${e}`); }
+
+    // 몬테소리 셀 위치 찾기 (row=6, col=1)
+    if (pTest.outerDims) {
+      for (let ci = 0; ci < pTest.outerDims.cellCount; ci++) {
+        try {
+          const info = JSON.parse(doc.getCellInfo(0, 1, 0, ci));
+          if (info.row === 6 && info.col === 1) {
+            pTest.montessoriCellIdx = ci;
+            pTest.montessoriCellInfo = info;
+            break;
+          }
+        } catch { /* skip */ }
+      }
+    }
+
+    if (pTest.montessoriCellIdx >= 0) {
+      try {
+        pTest.montessoriCellParaCount = doc.getCellParagraphCount(0, 1, 0, pTest.montessoriCellIdx);
+      } catch { /* */ }
+
+      const outerRowCount = pTest.outerDims?.rowCount ?? 14;
+      const outerColCount = pTest.outerDims?.colCount ?? 9;
+      const cellIdx = pTest.montessoriCellIdx;
+
+      // --- 가설 1: [{"controlIndex":C, "cellIndex":X, "cellParaIndex":Y}] ---
+      // getCursorRectByPath 주석에서 확인한 공식 형식
+      for (let ci = 0; ci <= 3; ci++) {
+        for (let cp = 0; cp < Math.max(pTest.montessoriCellParaCount, 4); cp++) {
+          const path = JSON.stringify([{ controlIndex: ci, cellIndex: cellIdx, cellParaIndex: cp }]);
+          try {
+            const dims: { rowCount: number; colCount: number; cellCount: number } = JSON.parse(
+              doc.getTableDimensionsByPath(0, 1, path)
+            );
+            const success = dims.rowCount > 0 &&
+              (dims.rowCount !== outerRowCount || dims.colCount !== outerColCount);
+            pTest.attempts.push({ path, result: dims, success });
+            if (success && !pTest.successPath) pTest.successPath = path;
+          } catch (e) {
+            pTest.attempts.push({ path, error: String(e), success: false });
+          }
+        }
+      }
+
+      // --- 가설 2: 두 레벨 path (outer ctrl 명시 + inner navigation) ---
+      for (let outerCtrl = 0; outerCtrl <= 1; outerCtrl++) {
+        for (let innerCtrl = 0; innerCtrl <= 2; innerCtrl++) {
+          for (let cp = 0; cp < Math.max(pTest.montessoriCellParaCount, 3); cp++) {
+            const path = JSON.stringify([
+              { controlIndex: outerCtrl, cellIndex: cellIdx, cellParaIndex: cp },
+              { controlIndex: innerCtrl, cellIndex: 0, cellParaIndex: 0 },
+            ]);
+            try {
+              const dims: { rowCount: number; colCount: number; cellCount: number } = JSON.parse(
+                doc.getTableDimensionsByPath(0, 1, path)
+              );
+              const success = dims.rowCount > 0 &&
+                (dims.rowCount !== outerRowCount || dims.colCount !== outerColCount);
+              pTest.attempts.push({ path, result: dims, success });
+              if (success && !pTest.successPath) pTest.successPath = path;
+            } catch (e) {
+              pTest.attempts.push({ path, error: String(e), success: false });
+            }
+          }
+        }
+      }
+
+      // --- 가설 3: 다른 필드명 시도 ---
+      const altFormats = [
+        JSON.stringify([{ ctrl: 0, cell: cellIdx, para: 0 }]),
+        JSON.stringify({ controlIndex: 0, cellIndex: cellIdx, cellParaIndex: 0 }),
+        JSON.stringify([cellIdx, 0, 0]),
+        JSON.stringify([0, cellIdx, 0]),
+        String(cellIdx),
+        JSON.stringify({ path: [{ ctrl: 0, cell: cellIdx, para: 0 }] }),
+      ];
+      for (const path of altFormats) {
+        try {
+          const dims: { rowCount: number; colCount: number; cellCount: number } = JSON.parse(
+            doc.getTableDimensionsByPath(0, 1, path)
+          );
+          const success = dims.rowCount > 0 &&
+            (dims.rowCount !== outerRowCount || dims.colCount !== outerColCount);
+          pTest.attempts.push({ path, result: dims, success });
+          if (success && !pTest.successPath) pTest.successPath = path;
+        } catch (e) {
+          pTest.attempts.push({ path, error: String(e), success: false });
+        }
+      }
+
+      // --- 보조: getTableCellBboxesByPath 시도 (path 형식 동일 가정) ---
+      try {
+        const path1 = JSON.stringify([{ controlIndex: 0, cellIndex: cellIdx, cellParaIndex: 0 }]);
+        const bboxResult = doc.getTableCellBboxesByPath(0, 1, path1);
+        const bboxParsed = JSON.parse(bboxResult);
+        if (Array.isArray(bboxParsed) && bboxParsed.length > 0) {
+          pTest.attempts.push({
+            path: `[bboxByPath] ${path1}`,
+            result: { rowCount: bboxParsed.length, colCount: 0, cellCount: bboxParsed.length },
+            success: bboxParsed.length !== outerRowCount * outerColCount,
+          });
+        }
+      } catch { /* */ }
+    }
+
+    // ── 검증된 경로로 직접 테스트 (2026-06-03 발견) ──────────────────────
+    // cellIdx=20 (row=6, col=4, colSpan=5) 에 중첩 표 존재
+    try {
+      const verifiedPath = JSON.stringify([
+        { controlIndex: 0, cellIndex: 20, cellParaIndex: 0 },
+        { controlIndex: 0, cellIndex: 0, cellParaIndex: 0 },
+      ]);
+      const innerDims: { rowCount: number; colCount: number; cellCount: number } = JSON.parse(
+        doc.getTableDimensionsByPath(0, 1, verifiedPath)
+      );
+      const isSuccess = innerDims.rowCount !== (pTest.outerDims?.rowCount ?? 14) ||
+                        innerDims.colCount !== (pTest.outerDims?.colCount ?? 9);
+      pTest.attempts.unshift({
+        path: `[VERIFIED] ${verifiedPath}`,
+        result: innerDims,
+        success: isSuccess,
+      });
+      if (isSuccess && !pTest.successPath) pTest.successPath = verifiedPath;
+    } catch (e) {
+      pTest.attempts.unshift({ path: '[VERIFIED] 2-level path cellIdx=20', error: String(e), success: false });
+    }
+
+    // LayerTree 힌트: page 0 레이어 트리에서 중첩 표 관련 키워드 탐색
+    try {
+      const layerRaw = doc.getPageLayerTree(0);
+      const nestedCount = (layerRaw.match(/"type"\s*:\s*"Table"/g) ?? []).length;
+      const cellCount = (layerRaw.match(/"type"\s*:\s*"Cell"/g) ?? []).length;
+      pTest.layerTreeHint = `LayerTree: Table 노드 ${nestedCount}개, Cell 노드 ${cellCount}개 (총 ${layerRaw.length}자)`;
+    } catch (e) {
+      pTest.layerTreeHint = `LayerTree 오류: ${e}`;
+    }
+
+    result.pathJsonTest = pTest;
+  } catch (e) {
+    errors.push(`pathJsonTest 전체 오류: ${e}`);
+  }
+
+  // ── 양식 파싱 (Step 3-E-2-b-2) ──────────────────────────────────────────
+  try {
+    const t1 = performance.now();
+    result.parsed = extractActivityPlan(doc);
+    console.log(`파싱 완료 (${Math.round(performance.now() - t1)}ms)`, result.parsed);
+  } catch (e) {
+    result.parseError = String(e);
+    errors.push(`extractActivityPlan: ${e}`);
   }
 
   doc.free();
@@ -450,7 +649,196 @@ export default function RhwpCoreTestPage() {
                 ))}
               </div>
             )}
+
+            {/* pathJson 형식 테스트 (Step 3-E-2-b-1) */}
+            {result.pathJsonTest && (
+              <div className="mb-4">
+                <h2 className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
+                  pathJson 형식 발견 시도 (Step 3-E-2-b-1)
+                </h2>
+                <div className="rounded-lg bg-white border border-gray-200 p-4 mb-3">
+                  {/* 결과 요약 */}
+                  <div className={`mb-3 rounded px-3 py-2 text-sm font-bold ${result.pathJsonTest.successPath ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-700'}`}>
+                    {result.pathJsonTest.successPath
+                      ? `✅ 발견: ${result.pathJsonTest.successPath}`
+                      : '❌ 미발견 — 시도한 모든 형식이 외부 표(14×9) 반환'}
+                  </div>
+
+                  {/* 셀 정보 */}
+                  <div className="text-xs text-gray-600 mb-3 space-y-1">
+                    <div>외부 표 차원: {result.pathJsonTest.outerDims
+                      ? `${result.pathJsonTest.outerDims.rowCount}행 × ${result.pathJsonTest.outerDims.colCount}열 (${result.pathJsonTest.outerDims.cellCount}셀)`
+                      : '미확인'}</div>
+                    <div>몬테소리 셀 (row=6,col=1): cellIdx={result.pathJsonTest.montessoriCellIdx === -1
+                      ? '미발견'
+                      : result.pathJsonTest.montessoriCellIdx}, cellParaCount={result.pathJsonTest.montessoriCellParaCount}
+                    </div>
+                    <div className="text-gray-400">{result.pathJsonTest.layerTreeHint}</div>
+                  </div>
+
+                  {/* 시도 결과 테이블 */}
+                  <details open={!!result.pathJsonTest.successPath}>
+                    <summary className="cursor-pointer text-xs font-semibold text-gray-500 mb-2">
+                      전체 시도 ({result.pathJsonTest.attempts.length}개)
+                    </summary>
+                    <div className="overflow-x-auto mt-2">
+                      <table className="border-collapse text-[10px] w-full">
+                        <thead>
+                          <tr className="bg-gray-100">
+                            <th className="border border-gray-300 px-2 py-1 text-left">#</th>
+                            <th className="border border-gray-300 px-2 py-1 text-left">path</th>
+                            <th className="border border-gray-300 px-2 py-1 text-left">결과</th>
+                            <th className="border border-gray-300 px-2 py-1 text-left">판정</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {result.pathJsonTest.attempts.map((a, i) => (
+                            <tr key={i} className={a.success ? 'bg-green-50' : ''}>
+                              <td className="border border-gray-200 px-2 py-0.5">{i + 1}</td>
+                              <td className="border border-gray-200 px-2 py-0.5 font-mono max-w-[300px] break-all">{a.path}</td>
+                              <td className="border border-gray-200 px-2 py-0.5">
+                                {a.error
+                                  ? <span className="text-red-500">{a.error.slice(0, 80)}</span>
+                                  : a.result
+                                    ? `${a.result.rowCount}×${a.result.colCount} (${a.result.cellCount}셀)`
+                                    : '—'}
+                              </td>
+                              <td className="border border-gray-200 px-2 py-0.5">
+                                {a.success
+                                  ? <span className="text-green-600 font-bold">✅ 성공</span>
+                                  : a.error
+                                    ? <span className="text-red-400">에러</span>
+                                    : <span className="text-gray-400">외부표</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            )}
           </>
+        )}
+
+        {/* ── 양식 파싱 결과 (Step 3-E-2-b-2) ── */}
+        {status === 'done' && result && (
+          <div className="mb-4">
+            <h2 className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">
+              양식 파싱 결과 (Step 3-E-2-b-2)
+            </h2>
+
+            {result.parseError && (
+              <div className="rounded bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700 mb-3">
+                파싱 오류: {result.parseError}
+              </div>
+            )}
+
+            {result.parsed && (
+              <>
+                {/* 메타 검증 체크리스트 */}
+                <div className="rounded-lg bg-white border border-gray-200 p-4 mb-3">
+                  <h3 className="text-xs font-bold text-gray-600 mb-2">메타정보</h3>
+                  {(() => {
+                    const p = result.parsed!;
+                    const checks = [
+                      { label: 'planDate', value: p.planDate, expected: /^\d{4}-\d{2}-\d{2}$/ },
+                      { label: 'subject', value: p.subject, expected: /.+/ },
+                      { label: 'teacherName', value: p.teacherName, expected: /.+/ },
+                      { label: 'classNameRaw', value: p.classNameRaw, expected: /.+/ },
+                      { label: 'classTimeRaw', value: p.classTimeRaw, expected: /.+/ },
+                      { label: 'classDayCount', value: String(p.classDayCount), expected: /^\d+$/ },
+                    ];
+                    return (
+                      <table className="border-collapse text-[11px] w-full">
+                        <tbody>
+                          {checks.map(c => {
+                            const ok = c.expected.test(c.value);
+                            return (
+                              <tr key={c.label}>
+                                <td className="border border-gray-200 px-2 py-0.5 font-mono text-gray-500 w-32">{c.label}</td>
+                                <td className="border border-gray-200 px-2 py-0.5 font-mono">{c.value || <em className="text-gray-300">비어있음</em>}</td>
+                                <td className="border border-gray-200 px-2 py-0.5 w-10 text-center">{ok ? '✅' : '❌'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    );
+                  })()}
+                </div>
+
+                {/* 섹션 */}
+                <details className="mb-3" open>
+                  <summary className="cursor-pointer select-none rounded bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100">
+                    시간대별 활동 ({result.parsed.sections.length}개)
+                    {result.parsed.sections.length === 11 ? ' ✅' : ' ❌ (11개 기대)'}
+                  </summary>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="border-collapse text-[10px] w-full">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-gray-300 px-2 py-1">#</th>
+                          <th className="border border-gray-300 px-2 py-1">label</th>
+                          <th className="border border-gray-300 px-2 py-1">category</th>
+                          <th className="border border-gray-300 px-2 py-1">content (앞 60자)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.parsed.sections.map(s => (
+                          <tr key={s.orderIndex}>
+                            <td className="border border-gray-200 px-2 py-0.5">{s.orderIndex}</td>
+                            <td className="border border-gray-200 px-2 py-0.5">{s.label}</td>
+                            <td className="border border-gray-200 px-2 py-0.5">
+                              <span className={`rounded px-1 text-[9px] ${s.category === 'OTHER' ? 'bg-gray-100' : 'bg-blue-100 text-blue-700'}`}>
+                                {s.category}
+                              </span>
+                            </td>
+                            <td className="border border-gray-200 px-2 py-0.5 text-gray-500 max-w-[300px] truncate">
+                              {s.content.slice(0, 60) || <em className="text-gray-300">빈 셀</em>}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+
+                {/* 몬테소리 */}
+                <details className="mb-3" open>
+                  <summary className="cursor-pointer select-none rounded bg-purple-50 px-3 py-1.5 text-xs font-semibold text-purple-700 hover:bg-purple-100">
+                    몬테소리 기록 ({result.parsed.montessoriRecords.length}명)
+                    {result.parsed.montessoriRecords.length >= 1 ? ' ✅' : ' ❌ (1명 이상 기대)'}
+                  </summary>
+                  <div className="mt-2 overflow-x-auto">
+                    <table className="border-collapse text-[10px]">
+                      <thead>
+                        <tr className="bg-gray-100">
+                          <th className="border border-gray-300 px-2 py-1">#</th>
+                          <th className="border border-gray-300 px-2 py-1">이름</th>
+                          <th className="border border-gray-300 px-2 py-1">영역</th>
+                          <th className="border border-gray-300 px-2 py-1">교구명</th>
+                          <th className="border border-gray-300 px-2 py-1">확인</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {result.parsed.montessoriRecords.map((r, i) => (
+                          <tr key={i}>
+                            <td className="border border-gray-200 px-2 py-0.5 text-gray-400">{i + 1}</td>
+                            <td className="border border-gray-200 px-2 py-0.5 font-medium">{r.childNameRaw}</td>
+                            <td className="border border-gray-200 px-2 py-0.5">{r.area ?? ''}</td>
+                            <td className="border border-gray-200 px-2 py-0.5">{r.material ?? ''}</td>
+                            <td className="border border-gray-200 px-2 py-0.5">{r.confirmed ?? ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              </>
+            )}
+          </div>
         )}
 
         {status === 'idle' && (

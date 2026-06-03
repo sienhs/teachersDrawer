@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { classroomApi } from '../../api/classroom';
 import { activityPlanApi } from '../../api/activityPlan';
+import { parseHwpFile } from '../../lib/hwp/extractor';
 import FileDropzone from '../../components/activityPlan/FileDropzone';
 import UploadProgressOverlay from '../../components/activityPlan/UploadProgressOverlay';
 import AnalysisConfirmModal from '../../components/activityPlan/AnalysisConfirmModal';
@@ -37,7 +38,7 @@ export default function ActivityPlanUploadPage() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [analyzing]);
 
-  // 1단계: 분석 요청 → 모달 열기
+  // 1단계: rhwp/core 파싱 → 백엔드 자동 매칭/중복 감지 → 모달 열기
   const handleAnalyze = async () => {
     if (!file) {
       setError('.hwp 또는 .hwpx 파일을 선택해 주세요.');
@@ -46,8 +47,11 @@ export default function ActivityPlanUploadPage() {
     setError('');
     setAnalyzing(true);
     try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const parsed = await parseHwpFile(bytes);
       const result = await activityPlanApi.analyze(
         file,
+        parsed,
         classroomId !== '' ? classroomId : undefined,
       );
       setAnalysis(result);

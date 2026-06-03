@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { activityPlanApi } from '../../api/activityPlan';
+import { parseHwpFile } from '../../lib/hwp/extractor';
 import type { ActivityPlanAnalysis, ActivityPlanConfirmRequest } from '../../types/activityPlan';
 import AnalysisConfirmModal from './AnalysisConfirmModal';
 import RhwpEmbed from './RhwpEmbed';
@@ -45,7 +46,7 @@ function formatRelativeTime(date: Date): string {
   return `${minutes}분 전`;
 }
 
-export default function RhwpViewerPanel({ planId, fileName, defaultOpen, onReflected }: Props) { // classroomId unused while [정리화면에 반영] is disabled
+export default function RhwpViewerPanel({ planId, fileName, classroomId, defaultOpen, onReflected }: Props) {
   const [isOpen, setIsOpen] = useState(() => {
     const stored = localStorage.getItem('rhwp-panel-open');
     if (stored !== null) return stored === 'true';
@@ -58,14 +59,14 @@ export default function RhwpViewerPanel({ planId, fileName, defaultOpen, onRefle
 
   // 편집 모드 상태
   const [editMode, setEditMode] = useState(false);
-  const [, setPendingBytes] = useState<Uint8Array | null>(null); // getter unused while [정리화면에 반영] is disabled
+  const [pendingBytes, setPendingBytes] = useState<Uint8Array | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
-  const [, setSavedSinceLastReflect] = useState(false); // getter unused while [정리화면에 반영] is disabled
+  const [savedSinceLastReflect, setSavedSinceLastReflect] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(false);
 
-  // [정리화면에 반영] 모달
-  // const [reflecting, setReflecting] = useState(false); // TODO(Phase 4): 재활성화 시 주석 해제
+  // [정리화면에 반영] 상태
+  const [reflecting, setReflecting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<ActivityPlanAnalysis | null>(null);
 
@@ -139,22 +140,22 @@ export default function RhwpViewerPanel({ planId, fileName, defaultOpen, onRefle
     }
   }, [planId, fileName]);
 
-  // TODO(Phase 4): [정리화면에 반영] 재활성화 시 아래 주석 해제
-  // const handleReflect = async () => {
-  //   setReflecting(true);
-  //   try {
-  //     const bytes = pendingBytes ?? hwpBytes;
-  //     if (!bytes) return;
-  //     const file = new File([bytes.buffer as ArrayBuffer], fileName, { type: 'application/x-hwp' });
-  //     const analysis = await activityPlanApi.analyze(file, classroomId ?? undefined);
-  //     setAnalysisResult(analysis);
-  //     setShowConfirmModal(true);
-  //   } catch {
-  //     alert('분석에 실패했습니다. 다시 시도해주세요.');
-  //   } finally {
-  //     setReflecting(false);
-  //   }
-  // };
+  const handleReflect = useCallback(async () => {
+    const bytes = pendingBytes ?? hwpBytes;
+    if (!bytes) return;
+    setReflecting(true);
+    try {
+      const parsed = await parseHwpFile(bytes);
+      const file = new File([bytes.buffer as ArrayBuffer], fileName, { type: 'application/x-hwp' });
+      const analysis = await activityPlanApi.analyze(file, parsed, classroomId ?? undefined);
+      setAnalysisResult(analysis);
+      setShowConfirmModal(true);
+    } catch {
+      alert('분석에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      setReflecting(false);
+    }
+  }, [pendingBytes, hwpBytes, fileName, classroomId]);
 
   // 모달에서 [수락하고 저장] 클릭
   const handleConfirmReflect = async (request: ActivityPlanConfirmRequest) => {
@@ -244,14 +245,19 @@ export default function RhwpViewerPanel({ planId, fileName, defaultOpen, onRefle
               편집 {editMode ? 'ON' : 'OFF'}
             </button>
 
-            {/* [정리화면에 반영] — 임시 비활성화 (rhwp export ↔ pyhwp 비호환, Phase 4에서 해결) */}
+            {/* [정리화면에 반영] */}
             <button
               type="button"
-              disabled
-              title="준비 중인 기능입니다"
-              className="cursor-not-allowed rounded-lg bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-400 opacity-60"
+              onClick={handleReflect}
+              disabled={reflecting || loadStatus !== 'done'}
+              title={savedSinceLastReflect ? '저장된 내용을 정리화면에 반영합니다' : '편집 후 반영 가능합니다'}
+              className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                savedSinceLastReflect
+                  ? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              }`}
             >
-              정리화면에 반영
+              {reflecting ? '분석 중…' : '정리화면에 반영'}
             </button>
 
             <button
@@ -303,9 +309,7 @@ export default function RhwpViewerPanel({ planId, fileName, defaultOpen, onRefle
             <span className="text-red-400">저장 실패 — 네트워크를 확인해주세요</span>
           )}
           {!saving && !saveError && lastSavedAt && (
-            <span>
-              {formatRelativeTime(lastSavedAt)} 자동 저장됨 (원본 파일만 갱신, 정리화면은 첫 업로드 기준)
-            </span>
+            <span>{formatRelativeTime(lastSavedAt)} 저장됨</span>
           )}
           {!saving && !saveError && !lastSavedAt && editMode && (
             <span>편집 후 3초 뒤 자동 저장됩니다</span>

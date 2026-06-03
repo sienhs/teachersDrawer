@@ -34,10 +34,6 @@ minio:
   secret-key: minioadmin123
   bucket-name: teachers-drawer
 
-hwp:
-  parser:
-    base-url: http://localhost:8001
-    timeout-seconds: 60
 cors:
   allowed-origins: http://localhost:5173
 neis:

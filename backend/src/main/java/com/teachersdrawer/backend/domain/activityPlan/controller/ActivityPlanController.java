@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -25,6 +26,7 @@ import com.teachersdrawer.backend.domain.activityPlan.dto.ActivityPlanResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.ActivityPlanSummaryResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.MontessoriRecordResponse;
 import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.ActivityPlanAnalysisResponse;
+import com.teachersdrawer.backend.domain.activityPlan.dto.analyze.FrontendParsedPlan;
 import com.teachersdrawer.backend.domain.activityPlan.dto.confirm.ActivityPlanConfirmRequest;
 import com.teachersdrawer.backend.domain.activityPlan.service.ActivityPlanService;
 import com.teachersdrawer.backend.global.response.ApiResponse;
@@ -41,14 +43,15 @@ public class ActivityPlanController {
 
     private final ActivityPlanService activityPlanService;
 
-    // HWP 분석 (DB 저장 X, 팝업용)
+    // HWP 분석 (DB 저장 X, 팝업용) — 파싱은 프론트 rhwp/core, 백엔드는 자동 매칭/중복 감지만
     @PostMapping(value = "/analyze", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<ActivityPlanAnalysisResponse>> analyze(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam("file") MultipartFile file,
+            @RequestPart(name = "parsed") FrontendParsedPlan parsed,
             @RequestParam(value = "classroomId", required = false) Long classroomId
     ) {
-        ActivityPlanAnalysisResponse response = activityPlanService.analyze(userDetails.getId(), file, classroomId);
+        ActivityPlanAnalysisResponse response = activityPlanService.analyze(userDetails.getId(), file, parsed, classroomId);
         return ResponseEntity.ok(ApiResponse.success("HWP 분석 완료", response));
     }
 
@@ -70,17 +73,6 @@ public class ActivityPlanController {
     ) {
         activityPlanService.cancelTemp(userDetails.getId(), fileKey);
         return ResponseEntity.ok(ApiResponse.success("임시 파일 삭제 완료", null));
-    }
-
-    // HWP 업로드 (레거시 — 자동 확정)
-    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public ResponseEntity<ApiResponse<ActivityPlanResponse>> upload(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "classroomId", required = false) Long classroomId
-    ) {
-        ActivityPlanResponse response = activityPlanService.upload(userDetails.getId(), file, classroomId);
-        return ResponseEntity.ok(ApiResponse.success("활동계획안 업로드 성공", response));
     }
 
     // 내 활동계획안 목록
