@@ -136,6 +136,16 @@ public class ActivityPlanController {
                 .body(result.bytes());
     }
 
+    // 자동완성 제안 (Phase 4 Step 4-A-2)
+    @GetMapping("/suggestions")
+    public ResponseEntity<ApiResponse<List<String>>> getSuggestions(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam("q") String q
+    ) {
+        List<String> suggestions = activityPlanService.findContentSuggestions(userDetails.getId(), q);
+        return ResponseEntity.ok(ApiResponse.success("추천 조회 성공", suggestions));
+    }
+
     // 아이별 몬테소리 활동 이력
     @GetMapping("/children/{childId}/montessori")
     public ResponseEntity<ApiResponse<List<MontessoriRecordResponse>>> getChildMontessoriHistory(

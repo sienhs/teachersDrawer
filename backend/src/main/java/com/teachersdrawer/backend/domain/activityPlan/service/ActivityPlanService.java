@@ -418,6 +418,13 @@ public class ActivityPlanService {
         }
     }
 
+    // ---- 자동완성 제안 (Phase 4 Step 4-A-2) ----
+
+    public List<String> findContentSuggestions(Long userId, String keyword) {
+        if (keyword == null || keyword.trim().length() < 2) return List.of();
+        return activitySectionRepository.findContentByUserIdAndKeyword(userId, keyword.trim());
+    }
+
     private SectionCategory parseSectionCategory(String category) {
         if (category == null) return SectionCategory.OTHER;
         try {
