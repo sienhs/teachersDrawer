@@ -19,6 +19,7 @@ import RhwpCoreTestPage from './pages/devtest/RhwpCoreTestPage';
 import RhwpConsistencyTestPage from './pages/devtest/RhwpConsistencyTestPage';
 import TiptapTestPage from './pages/devtest/TiptapTestPage';
 import EditorBridgeTestPage from './pages/devtest/EditorBridgeTestPage';
+import EditorSlashTestPage from './pages/devtest/EditorSlashTestPage';
 
 function App() {
   const [isRestoring, setIsRestoring] = useState(true);
@@ -92,6 +93,7 @@ function App() {
         <Route path="/_rhwp-consistency-test" element={<RhwpConsistencyTestPage />} />
         <Route path="/_tiptap-test" element={<TiptapTestPage />} />
         <Route path="/_editor-bridge-test" element={<EditorBridgeTestPage />} />
+        <Route path="/_editor-slash-test" element={<EditorSlashTestPage />} />
 
         {/* 알 수 없는 경로 → 대시보드 */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
