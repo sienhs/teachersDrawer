@@ -469,11 +469,131 @@ function JsonSection({ title, data, maxLen = 8000 }: { title: string; data: unkn
   );
 }
 
+// ── 쓰기 API 테스트 타입 (Step 4-A-1) ────────────────────────────────────
+interface WriteStep {
+  name: string;
+  result: string;
+  ok: boolean;
+}
+
+interface WriteTestResult {
+  steps: WriteStep[];
+  errors: string[];
+  exportedBytes: Uint8Array | null;
+  verifyPageCount: number | null;
+  verifyHtml: string | null;
+  elapsedMs: number;
+}
+
+async function runWriteApiTest(): Promise<WriteTestResult> {
+  await init();
+  const t0 = performance.now();
+  const steps: WriteStep[] = [];
+  const errors: string[] = [];
+  let exportedBytes: Uint8Array | null = null;
+  let verifyPageCount: number | null = null;
+  let verifyHtml: string | null = null;
+
+  // 1. 빈 문서 생성
+  const doc = HwpDocument.createEmpty();
+  try {
+    const r = doc.createBlankDocument();
+    steps.push({ name: 'createBlankDocument()', result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: 'createBlankDocument()', result: String(e), ok: false });
+    errors.push(`createBlankDocument: ${e}`);
+  }
+
+  // 2. 본문 첫 문단에 텍스트 삽입
+  try {
+    const r = doc.insertText(0, 0, 0, '안녕하세요, rhwp/core 쓰기 API 테스트입니다.');
+    steps.push({ name: 'insertText(0, 0, 0, "안녕하세요...")', result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: 'insertText', result: String(e), ok: false });
+    errors.push(`insertText: ${e}`);
+  }
+
+  // 3. 문단 분할 (표를 삽입할 두 번째 문단 생성)
+  try {
+    const len = doc.getParagraphLength(0, 0);
+    const r = doc.splitParagraph(0, 0, len);
+    steps.push({ name: `splitParagraph(0, 0, ${len})`, result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: 'splitParagraph', result: String(e), ok: false });
+    errors.push(`splitParagraph: ${e}`);
+  }
+
+  // 4. 3행 2열 표 생성
+  let tableParaIdx = 1;
+  let tableCtrlIdx = 0;
+  try {
+    const r = doc.createTable(0, 1, 0, 3, 2);
+    const parsed = JSON.parse(r);
+    tableParaIdx = parsed.paraIdx ?? 1;
+    tableCtrlIdx = parsed.controlIdx ?? 0;
+    steps.push({ name: 'createTable(0, 1, 0, rows=3, cols=2)', result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: 'createTable', result: String(e), ok: false });
+    errors.push(`createTable: ${e}`);
+  }
+
+  // 5. 표 셀에 텍스트 삽입 (6셀)
+  const cellTexts = ['이름', '나이', '김철수', '7세', '이영희', '6세'];
+  for (let i = 0; i < cellTexts.length; i++) {
+    try {
+      const r = doc.insertTextInCell(0, tableParaIdx, tableCtrlIdx, i, 0, 0, cellTexts[i]);
+      steps.push({ name: `insertTextInCell(cell=${i}, "${cellTexts[i]}")`, result: r, ok: true });
+    } catch (e) {
+      steps.push({ name: `insertTextInCell(cell=${i})`, result: String(e), ok: false });
+      errors.push(`insertTextInCell[${i}]: ${e}`);
+    }
+  }
+
+  // 6. HWP export
+  try {
+    exportedBytes = doc.exportHwp();
+    steps.push({ name: 'exportHwp()', result: `${exportedBytes.length.toLocaleString()} bytes`, ok: true });
+  } catch (e) {
+    steps.push({ name: 'exportHwp()', result: String(e), ok: false });
+    errors.push(`exportHwp: ${e}`);
+  }
+
+  // 7. 자기 재로드 검증 (export된 bytes를 다시 로드)
+  if (exportedBytes) {
+    try {
+      const verifyDoc = new HwpDocument(exportedBytes);
+      verifyPageCount = verifyDoc.pageCount();
+      try { verifyHtml = verifyDoc.renderPageHtml(0); } catch { /* pass */ }
+      steps.push({ name: 'exportHwp() 재로드 검증', result: `pageCount=${verifyPageCount} ✅`, ok: true });
+      verifyDoc.free();
+    } catch (e) {
+      steps.push({ name: 'exportHwp() 재로드 검증', result: String(e), ok: false });
+      errors.push(`재로드 검증: ${e}`);
+    }
+  }
+
+  doc.free();
+  return { steps, errors, exportedBytes, verifyPageCount, verifyHtml, elapsedMs: performance.now() - t0 };
+}
+
+function downloadBytes(bytes: Uint8Array, filename: string) {
+  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ── 메인 페이지 ──────────────────────────────────────────────────────────
 export default function RhwpCoreTestPage() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<ExplorationResult | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [writeStatus, setWriteStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [writeResult, setWriteResult] = useState<WriteTestResult | null>(null);
+  const [writeError, setWriteError] = useState('');
   const autoLoadedRef = useRef(false);
 
   const runExploration = async (bytes: Uint8Array) => {
@@ -847,6 +967,123 @@ export default function RhwpCoreTestPage() {
             <p className="text-xs mt-1">/hwp-samples/CASE_5_8.hwp 를 확인하세요</p>
           </div>
         )}
+
+        {/* ── 쓰기 API 시험 (Step 4-A-1) ── */}
+        <div className="mt-8 mb-4">
+          <div className="flex items-center gap-3 mb-3">
+            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">
+              쓰기 API 시험 — Step 4-A-1
+            </h2>
+            <button
+              onClick={async () => {
+                setWriteStatus('running');
+                setWriteResult(null);
+                setWriteError('');
+                try {
+                  const r = await runWriteApiTest();
+                  setWriteResult(r);
+                  setWriteStatus('done');
+                } catch (e) {
+                  setWriteError(String(e));
+                  setWriteStatus('error');
+                }
+              }}
+              disabled={writeStatus === 'running'}
+              className="rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {writeStatus === 'running' ? '실행 중…' : '쓰기 API 테스트 실행'}
+            </button>
+            {writeStatus === 'error' && <span className="text-xs text-red-500">{writeError}</span>}
+          </div>
+
+          {writeResult && (
+            <div className="rounded-lg bg-white border border-gray-200 p-4">
+              {/* 요약 */}
+              <div className="flex items-center gap-4 mb-4">
+                <div className={`rounded px-3 py-1 text-sm font-bold ${writeResult.errors.length === 0 ? 'bg-green-100 text-green-800' : 'bg-red-50 text-red-700'}`}>
+                  {writeResult.errors.length === 0 ? '✅ 전 단계 성공' : `❌ 에러 ${writeResult.errors.length}건`}
+                </div>
+                <div className="text-xs text-gray-500">{Math.round(writeResult.elapsedMs)}ms 소요</div>
+                {writeResult.exportedBytes && (
+                  <button
+                    onClick={() => downloadBytes(writeResult.exportedBytes!, 'write-test-output.hwp')}
+                    className="rounded bg-blue-600 px-3 py-1 text-xs font-semibold text-white hover:bg-blue-700"
+                  >
+                    HWP 다운로드 ({(writeResult.exportedBytes.length / 1024).toFixed(1)}KB)
+                  </button>
+                )}
+              </div>
+
+              {/* 단계별 결과 */}
+              <table className="border-collapse text-[11px] w-full mb-4">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-200 px-2 py-1 text-left w-6">#</th>
+                    <th className="border border-gray-200 px-2 py-1 text-left">API 호출</th>
+                    <th className="border border-gray-200 px-2 py-1 text-left">결과</th>
+                    <th className="border border-gray-200 px-2 py-1 w-10">판정</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {writeResult.steps.map((s, i) => (
+                    <tr key={i} className={s.ok ? '' : 'bg-red-50'}>
+                      <td className="border border-gray-200 px-2 py-0.5 text-gray-400">{i + 1}</td>
+                      <td className="border border-gray-200 px-2 py-0.5 font-mono text-gray-700">{s.name}</td>
+                      <td className="border border-gray-200 px-2 py-0.5 text-gray-500 max-w-xs truncate">{s.result}</td>
+                      <td className="border border-gray-200 px-2 py-0.5 text-center">
+                        {s.ok ? '✅' : '❌'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* 재로드 검증 HTML 미리보기 */}
+              {writeResult.verifyHtml && (
+                <details className="mb-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-gray-600 hover:text-gray-800">
+                    export → 재로드 렌더링 미리보기 (page 0)
+                  </summary>
+                  <div className="mt-2 border border-gray-200 rounded bg-white" style={{ transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%', height: '400px', overflow: 'hidden' }}>
+                    <iframe srcDoc={writeResult.verifyHtml} className="w-full h-full border-none" title="write test output" />
+                  </div>
+                </details>
+              )}
+
+              {/* API 이름 비교표 */}
+              <details className="mt-3">
+                <summary className="cursor-pointer text-xs font-semibold text-gray-500">
+                  제미나이 추정 API명 vs 실제 .d.ts 확인 결과
+                </summary>
+                <table className="border-collapse text-[11px] w-full mt-2">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-200 px-2 py-1 text-left">제미나이 추정</th>
+                      <th className="border border-gray-200 px-2 py-1 text-left">실제 API 이름</th>
+                      <th className="border border-gray-200 px-2 py-1 w-10">일치</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['InsertText', 'insertText(sec, para, char_offset, text)', '🔶 카멜케이스 차이'],
+                      ['TableCreate', 'createTable(sec, para, char_offset, rows, cols)', '🔶 순서 뒤집힘'],
+                      ['CharShape', 'applyCharFormat(sec, para, start, end, props_json)', '❌ 이름 완전히 다름 (한컴 OLE 혼동)'],
+                      ['ParagraphShape', 'applyParaFormat(sec, para, props_json)', '❌ 이름 완전히 다름'],
+                      ['export(저장)', 'exportHwp() → Uint8Array', '✅ 존재'],
+                      ['blank.hwp 템플릿', 'createBlankDocument() — 내장 blank2010.hwp', '✅ 존재'],
+                    ].map(([gemini, actual, match]) => (
+                      <tr key={gemini}>
+                        <td className="border border-gray-200 px-2 py-0.5 font-mono text-gray-500">{gemini}</td>
+                        <td className="border border-gray-200 px-2 py-0.5 font-mono text-gray-700">{actual}</td>
+                        <td className="border border-gray-200 px-2 py-0.5">{match}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </details>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

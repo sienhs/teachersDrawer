@@ -17,6 +17,8 @@ import ComingSoonPage from './pages/placeholder/ComingSoonPage';
 import RhwpTestPage from './pages/devtest/RhwpTestPage';
 import RhwpCoreTestPage from './pages/devtest/RhwpCoreTestPage';
 import RhwpConsistencyTestPage from './pages/devtest/RhwpConsistencyTestPage';
+import TiptapTestPage from './pages/devtest/TiptapTestPage';
+import EditorBridgeTestPage from './pages/devtest/EditorBridgeTestPage';
 
 function App() {
   const [isRestoring, setIsRestoring] = useState(true);
@@ -88,6 +90,8 @@ function App() {
         <Route path="/_rhwp-test" element={<RhwpTestPage />} />
         <Route path="/_rhwp-core-test" element={<RhwpCoreTestPage />} />
         <Route path="/_rhwp-consistency-test" element={<RhwpConsistencyTestPage />} />
+        <Route path="/_tiptap-test" element={<TiptapTestPage />} />
+        <Route path="/_editor-bridge-test" element={<EditorBridgeTestPage />} />
 
         {/* 알 수 없는 경로 → 대시보드 */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
