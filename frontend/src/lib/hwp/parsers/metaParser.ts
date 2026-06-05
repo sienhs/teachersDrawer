@@ -106,7 +106,7 @@ export function parseMeta(table: TableData): MetaResult {
       } else if (found.field === 'classDayCount') {
         meta.classDayCount = parseDayCount(raw);
       } else {
-        (meta as Record<string, unknown>)[found.field] = normLabel(raw);
+        (meta as unknown as Record<string, unknown>)[found.field] = normLabel(raw);
       }
       i++;
     }

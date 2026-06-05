@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AppLayout from './components/layout/AppLayout';
 import LoginPage from './pages/auth/LoginPage';
 import SignupPage from './pages/auth/SignupPage';
+import LandingPage from './pages/landing/LandingPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 import ActivityPlanListPage from './pages/activityPlan/ActivityPlanListPage';
 import ActivityPlanUploadPage from './pages/activityPlan/ActivityPlanUploadPage';
@@ -14,12 +15,20 @@ import ActivityPlanDetailPage from './pages/activityPlan/ActivityPlanDetailPage'
 import ChildDetailPage from './pages/child/ChildDetailPage';
 import ChildrenManagePage from './pages/children/ChildrenManagePage';
 import ComingSoonPage from './pages/placeholder/ComingSoonPage';
+import EditorPage from './pages/editor/EditorPage';
 import RhwpTestPage from './pages/devtest/RhwpTestPage';
 import RhwpCoreTestPage from './pages/devtest/RhwpCoreTestPage';
 import RhwpConsistencyTestPage from './pages/devtest/RhwpConsistencyTestPage';
 import TiptapTestPage from './pages/devtest/TiptapTestPage';
 import EditorBridgeTestPage from './pages/devtest/EditorBridgeTestPage';
 import EditorSlashTestPage from './pages/devtest/EditorSlashTestPage';
+import FormatTestPage from './pages/devtest/FormatTestPage';
+
+function RootRedirect() {
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />;
+  return <LandingPage />;
+}
 
 function App() {
   const [isRestoring, setIsRestoring] = useState(true);
@@ -64,6 +73,9 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
 
+        {/* 루트: 비로그인 → 랜딩, 로그인 → 대시보드 */}
+        <Route path="/" element={<RootRedirect />} />
+
         {/* 인증 + 공통 레이아웃 적용 영역 */}
         <Route
           element={
@@ -72,7 +84,6 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
 
           {/* 활동계획안 */}
@@ -85,6 +96,9 @@ function App() {
 
           <Route path="/children" element={<ChildrenManagePage />} />
           <Route path="/classrooms" element={<ComingSoonPage title="반 관리" />} />
+
+          {/* 에디터 */}
+          <Route path="/editor/new" element={<EditorPage />} />
         </Route>
 
         {/* 개발 도구 — 숨김 라우팅, 사이드바 미표시 */}
@@ -94,6 +108,7 @@ function App() {
         <Route path="/_tiptap-test" element={<TiptapTestPage />} />
         <Route path="/_editor-bridge-test" element={<EditorBridgeTestPage />} />
         <Route path="/_editor-slash-test" element={<EditorSlashTestPage />} />
+        <Route path="/_format-test" element={<FormatTestPage />} />
 
         {/* 알 수 없는 경로 → 대시보드 */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

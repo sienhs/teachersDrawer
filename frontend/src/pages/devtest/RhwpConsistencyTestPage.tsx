@@ -141,12 +141,7 @@ interface RunResult {
 }
 
 async function runComparison(file: File): Promise<RunResult> {
-  // 1. hwp-parser (백엔드)
-  const t1 = performance.now();
-  const hwp = await activityPlanApi.analyze(file);
-  const hwpMs = performance.now() - t1;
-
-  // 2. rhwp/core (WASM)
+  // 1. rhwp/core (WASM) — hwp-parser 폐기 후 rhwp/core가 파싱 주체
   const t2 = performance.now();
   const bytes = new Uint8Array(await file.arrayBuffer());
   await init();
@@ -154,6 +149,11 @@ async function runComparison(file: File): Promise<RunResult> {
   const rhwp = extractActivityPlan(doc);
   doc.free();
   const rhwpMs = performance.now() - t2;
+
+  // 2. analyze API — hwp-parser 폐기 후 parsed를 직접 전달 (백엔드는 매칭만)
+  const t1 = performance.now();
+  const hwp = await activityPlanApi.analyze(file, rhwp);
+  const hwpMs = performance.now() - t1;
 
   // 3. 비교
   const comparison = compare(hwp, rhwp);

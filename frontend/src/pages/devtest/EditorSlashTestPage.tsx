@@ -17,6 +17,7 @@ import type { Classroom } from '../../types/classroom';
 import type { Enrollment } from '../../types/enrollment';
 import api from '../../api/instance';
 import type { ApiResponse } from '../../types/auth';
+import type { JSONContent } from '@tiptap/react';
 
 // ── 슬래시 메뉴 아이템 정의 ────────────────────────────────────────────
 interface SlashMenuItem {
@@ -217,7 +218,7 @@ export default function EditorSlashTestPage() {
         // Tiptap에서 표 셀 내용을 직접 설정하는 API가 없어 setContent로 전체 교체
         const currentJson = editor.getJSON();
         fillTableWithChildren(currentJson, enrollments);
-        editor.commands.setContent(currentJson, false);
+        editor.commands.setContent(currentJson as JSONContent);
       } catch (e) {
         console.error('아이 목록 불러오기 실패', e);
       } finally {

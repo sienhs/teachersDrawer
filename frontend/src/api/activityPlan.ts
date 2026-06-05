@@ -94,4 +94,11 @@ export const activityPlanApi = {
       })
       .then((r) => r.data.data);
   },
+
+  // 과거 활동계획안 문장 자동완성 추천 (백엔드 미구현 시 빈 배열 반환)
+  suggestions: (q: string): Promise<string[]> =>
+    api
+      .get<ApiResponse<string[]>>('/api/activity-plans/suggestions', { params: { q } })
+      .then((r) => r.data.data ?? [])
+      .catch(() => []),
 };

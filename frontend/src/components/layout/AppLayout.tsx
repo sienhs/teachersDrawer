@@ -1,18 +1,28 @@
+import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
-import Header from './Header';
 import Sidebar from './Sidebar';
 
-// 전체 화면 레이아웃: 헤더(상단 고정) + 사이드바(좌측) + 메인(우측 Outlet)
+const SIDEBAR_KEY = 'td_sidebar_collapsed';
+
 export default function AppLayout() {
+  const [collapsed, setCollapsed] = useState<boolean>(
+    () => localStorage.getItem(SIDEBAR_KEY) === 'true',
+  );
+
+  const toggle = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem(SIDEBAR_KEY, String(next));
+  };
+
   return (
-    <div className="min-h-screen bg-[#FFF8F0]">
-      <Header />
-      <div className="flex">
-        <Sidebar />
-        <main className="min-w-0 flex-1 p-6">
+    <div className="flex min-h-screen" style={{ background: '#fff' }}>
+      <Sidebar collapsed={collapsed} onToggle={toggle} />
+      <main className="flex-1 min-w-0 overflow-x-hidden">
+        <div className="px-8 py-7">
           <Outlet />
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

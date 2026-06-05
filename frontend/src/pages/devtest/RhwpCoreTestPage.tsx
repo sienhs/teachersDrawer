@@ -481,7 +481,7 @@ interface WriteTestResult {
   errors: string[];
   exportedBytes: Uint8Array | null;
   verifyPageCount: number | null;
-  verifyHtml: string | null;
+  verifySvg: string | null;
   elapsedMs: number;
 }
 
@@ -492,7 +492,7 @@ async function runWriteApiTest(): Promise<WriteTestResult> {
   const errors: string[] = [];
   let exportedBytes: Uint8Array | null = null;
   let verifyPageCount: number | null = null;
-  let verifyHtml: string | null = null;
+  let verifySvg: string | null = null;
 
   // 1. 빈 문서 생성
   const doc = HwpDocument.createEmpty();
@@ -563,7 +563,7 @@ async function runWriteApiTest(): Promise<WriteTestResult> {
     try {
       const verifyDoc = new HwpDocument(exportedBytes);
       verifyPageCount = verifyDoc.pageCount();
-      try { verifyHtml = verifyDoc.renderPageHtml(0); } catch { /* pass */ }
+      try { verifySvg = verifyDoc.renderPageSvg(0); } catch { /* pass */ }
       steps.push({ name: 'exportHwp() 재로드 검증', result: `pageCount=${verifyPageCount} ✅`, ok: true });
       verifyDoc.free();
     } catch (e) {
@@ -573,17 +573,292 @@ async function runWriteApiTest(): Promise<WriteTestResult> {
   }
 
   doc.free();
-  return { steps, errors, exportedBytes, verifyPageCount, verifyHtml, elapsedMs: performance.now() - t0 };
+  return { steps, errors, exportedBytes, verifyPageCount, verifySvg, elapsedMs: performance.now() - t0 };
 }
 
 function downloadBytes(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const blob = new Blob([bytes.slice()], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// ── 표 속성 쓰기 테스트 (Phase 4 조사) ───────────────────────────────────────
+
+interface TablePropsStep {
+  name: string;
+  call: string;
+  result: string;
+  readBack?: string;
+  ok: boolean;
+  note?: string;
+}
+
+interface TablePropsTestResult {
+  steps: TablePropsStep[];
+  errors: string[];
+  exportedBytes: Uint8Array | null;
+  verifySvg: string | null;
+  elapsedMs: number;
+}
+
+async function runTablePropsTest(): Promise<TablePropsTestResult> {
+  await init();
+  const t0 = performance.now();
+  const steps: TablePropsStep[] = [];
+  const errors: string[] = [];
+  let exportedBytes: Uint8Array | null = null;
+  let verifySvg: string | null = null;
+
+  const doc = HwpDocument.createEmpty();
+
+  // 1. 빈 문서
+  try {
+    const r = doc.createBlankDocument();
+    steps.push({ name: '빈 문서 생성', call: 'createBlankDocument()', result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: '빈 문서 생성', call: 'createBlankDocument()', result: String(e), ok: false });
+    errors.push(String(e));
+    doc.free();
+    return { steps, errors, exportedBytes, verifySvg, elapsedMs: performance.now() - t0 };
+  }
+
+  // 2. 표 삽입 — createTableEx에 colWidths 지정
+  let tPara = 0; let tCtrl = 0;
+  try {
+    const optJson = JSON.stringify({ sectionIdx: 0, paraIdx: 0, charOffset: 0, rowCount: 3, colCount: 3, colWidths: [2000, 4000, 2000] });
+    const r = doc.createTableEx(optJson);
+    const parsed = JSON.parse(r);
+    tPara = parsed.paraIdx ?? 0;
+    tCtrl = parsed.controlIdx ?? 0;
+    steps.push({ name: '표 삽입 createTableEx(colWidths=[2000,4000,2000])', call: `createTableEx(${optJson})`, result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: '표 삽입 createTableEx', call: '', result: String(e), ok: false });
+    errors.push(String(e));
+  }
+
+  // 3. getTableProperties — 읽기 기준값
+  try {
+    const r = doc.getTableProperties(0, tPara, tCtrl);
+    steps.push({ name: 'getTableProperties (before)', call: `getTableProperties(0,${tPara},${tCtrl})`, result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: 'getTableProperties', call: '', result: String(e), ok: false });
+  }
+
+  // 4. setTableProperties — 알려진 필드
+  for (const [desc, json] of [
+    ['cellSpacing=100', JSON.stringify({ cellSpacing: 100 })],
+    ['paddingLeft=200', JSON.stringify({ paddingLeft: 200, paddingRight: 200 })],
+  ] as [string, string][]) {
+    try {
+      const r = doc.setTableProperties(0, tPara, tCtrl, json);
+      const rb = doc.getTableProperties(0, tPara, tCtrl);
+      steps.push({ name: `setTableProperties — ${desc}`, call: `setTableProperties(${json})`, result: r, readBack: rb, ok: true });
+    } catch (e) {
+      steps.push({ name: `setTableProperties — ${desc}`, call: '', result: String(e), ok: false });
+      errors.push(String(e));
+    }
+  }
+
+  // 5. getCellProperties — 셀 0 읽기
+  try {
+    const r = doc.getCellProperties(0, tPara, tCtrl, 0);
+    steps.push({ name: 'getCellProperties cell=0 (before)', call: `getCellProperties(0,${tPara},${tCtrl},0)`, result: r, ok: true });
+  } catch (e) {
+    steps.push({ name: 'getCellProperties', call: '', result: String(e), ok: false });
+  }
+
+  // 6. setCellProperties — 알려진 필드
+  for (const [desc, json] of [
+    ['width=4000', JSON.stringify({ width: 4000 })],
+    ['height=1200', JSON.stringify({ height: 1200 })],
+    ['paddingLeft=200', JSON.stringify({ paddingLeft: 200 })],
+    ['verticalAlign=center(string)', JSON.stringify({ verticalAlign: 'center' })],
+    ['verticalAlign=1(숫자)', JSON.stringify({ verticalAlign: 1 })],
+  ] as [string, string][]) {
+    try {
+      const r = doc.setCellProperties(0, tPara, tCtrl, 0, json);
+      const rb = doc.getCellProperties(0, tPara, tCtrl, 0);
+      steps.push({ name: `setCellProperties — ${desc}`, call: `setCellProperties(cell=0, ${json})`, result: r, readBack: rb, ok: true });
+    } catch (e) {
+      steps.push({ name: `setCellProperties — ${desc}`, call: '', result: String(e), ok: false });
+      errors.push(String(e));
+    }
+  }
+
+  // 7. setCellProperties — 배경색/테두리 추측 (핵심 미지 영역)
+  const fillVariants: [string, string][] = [
+    ['backgroundColor="#FF0000"', JSON.stringify({ backgroundColor: '#FF0000' })],
+    ['backgroundColor=16711680(int)', JSON.stringify({ backgroundColor: 16711680 })],
+    ['fillColor="#FF0000"', JSON.stringify({ fillColor: '#FF0000' })],
+    ['fillColor=255(int BGR)', JSON.stringify({ fillColor: 255 })],
+    ['fill={color:"#FF0000"}', JSON.stringify({ fill: { color: '#FF0000' } })],
+    ['backColor="#FF0000"', JSON.stringify({ backColor: '#FF0000' })],
+    ['bgColor="#FF0000"', JSON.stringify({ bgColor: '#FF0000' })],
+    ['shadeColor="#FF0000"', JSON.stringify({ shadeColor: '#FF0000' })],
+    ['borderColor="#0000FF"', JSON.stringify({ borderColor: '#0000FF' })],
+    ['borderLeft={color:"#0000FF",width:100}', JSON.stringify({ borderLeft: { color: '#0000FF', width: 100 } })],
+    ['border={all:{color:"#0000FF",width:100}}', JSON.stringify({ border: { all: { color: '#0000FF', width: 100 } } })],
+  ];
+  for (const [desc, json] of fillVariants) {
+    try {
+      const r = doc.setCellProperties(0, tPara, tCtrl, 0, json);
+      const parsed = JSON.parse(r);
+      const rb = doc.getCellProperties(0, tPara, tCtrl, 0);
+      steps.push({
+        name: `[fill추측] setCellProperties — ${desc}`,
+        call: `setCellProperties(cell=0, ${json})`,
+        result: r,
+        readBack: rb,
+        ok: parsed?.ok === true,
+        note: parsed?.ok ? '⚠️ ok:true — HWP 파일 열어서 색상 반영 여부 직접 확인 필요' : undefined,
+      });
+    } catch (e) {
+      steps.push({ name: `[fill추측] setCellProperties — ${desc}`, call: `setCellProperties(cell=0, ${json})`, result: String(e), ok: false });
+    }
+  }
+
+  // 8. resizeTableCells — delta 방식
+  for (const [desc, json] of [
+    ['widthDelta=+500 cell=0', JSON.stringify([{ cellIdx: 0, widthDelta: 500 }])],
+    ['widthDelta=-200 cell=1', JSON.stringify([{ cellIdx: 1, widthDelta: -200 }])],
+    ['heightDelta=+300 cell=0', JSON.stringify([{ cellIdx: 0, heightDelta: 300 }])],
+    ['widthDelta cell=0,1,2 동시', JSON.stringify([{ cellIdx: 0, widthDelta: 100 }, { cellIdx: 1, widthDelta: -100 }])],
+  ] as [string, string][]) {
+    try {
+      const r = doc.resizeTableCells(0, tPara, tCtrl, json);
+      const rb = doc.getCellProperties(0, tPara, tCtrl, 0);
+      steps.push({ name: `resizeTableCells — ${desc}`, call: `resizeTableCells(${json})`, result: r, readBack: rb, ok: true });
+    } catch (e) {
+      steps.push({ name: `resizeTableCells — ${desc}`, call: '', result: String(e), ok: false });
+      errors.push(String(e));
+    }
+  }
+
+  // 9. createTableEx colWidths 반영 확인 — 두 번째 표
+  try {
+    const len = doc.getParagraphLength(0, 0);
+    doc.splitParagraph(0, 0, len);
+    const opt2 = JSON.stringify({ sectionIdx: 0, paraIdx: 1, charOffset: 0, rowCount: 2, colCount: 3, colWidths: [1000, 5000, 2000] });
+    const r2 = doc.createTableEx(opt2);
+    const p2 = JSON.parse(r2);
+    const tPara2 = p2.paraIdx ?? 1;
+    const tCtrl2 = p2.controlIdx ?? 0;
+    const c0 = doc.getCellProperties(0, tPara2, tCtrl2, 0);
+    const c1 = doc.getCellProperties(0, tPara2, tCtrl2, 1);
+    const c2 = doc.getCellProperties(0, tPara2, tCtrl2, 2);
+    steps.push({
+      name: 'createTableEx colWidths=[1000,5000,2000] 반영확인',
+      call: `createTableEx(${opt2})`,
+      result: r2,
+      readBack: `c0: ${c0} | c1: ${c1} | c2: ${c2}`,
+      ok: true,
+    });
+  } catch (e) {
+    steps.push({ name: 'createTableEx colWidths 2번째', call: '', result: String(e), ok: false });
+    errors.push(String(e));
+  }
+
+  // 10. export → 다운로드용
+  try {
+    exportedBytes = doc.exportHwp();
+    steps.push({ name: 'exportHwp()', call: 'exportHwp()', result: `${exportedBytes.length.toLocaleString()} bytes`, ok: true });
+  } catch (e) {
+    steps.push({ name: 'exportHwp()', call: '', result: String(e), ok: false });
+    errors.push(String(e));
+  }
+
+  // 11. 재로드 검증
+  if (exportedBytes) {
+    try {
+      const vDoc = new HwpDocument(exportedBytes);
+      const pc = vDoc.pageCount();
+      try { verifySvg = vDoc.renderPageSvg(0); } catch { /* pass */ }
+      steps.push({ name: 'exportHwp 재로드 검증', call: '', result: `pageCount=${pc} ✅`, ok: true });
+      vDoc.free();
+    } catch (e) {
+      steps.push({ name: 'exportHwp 재로드 검증', call: '', result: String(e), ok: false });
+      errors.push(String(e));
+    }
+  }
+
+  doc.free();
+  return { steps, errors, exportedBytes, verifySvg, elapsedMs: performance.now() - t0 };
+}
+
+// ── Step A: verticalAlign 숫자(0/1/2) 형식 테스트 ────────────────────────────
+async function runVaNumTest(): Promise<Uint8Array> {
+  await init();
+  const doc = HwpDocument.createEmpty();
+  try {
+    doc.createBlankDocument();
+    const parsed = JSON.parse(
+      doc.createTableEx(JSON.stringify({ sectionIdx: 0, paraIdx: 0, charOffset: 0, rowCount: 3, colCount: 1, colWidths: [14000] }))
+    ) as { paraIdx: number; controlIdx: number };
+    const tPara = parsed.paraIdx; const tCtrl = parsed.controlIdx;
+    for (let i = 0; i < 3; i++) {
+      const label = ['위 정렬 (0)', '가운데 정렬 (1)', '아래 정렬 (2)'][i];
+      doc.insertTextInCell(0, tPara, tCtrl, i, 0, 0, label);
+      doc.setCellProperties(0, tPara, tCtrl, i, JSON.stringify({ height: 3000, verticalAlign: i }));
+    }
+    return doc.exportHwp();
+  } finally { doc.free(); }
+}
+
+// ── Step A: verticalAlign 문자열("top"/"center"/"bottom") 형식 테스트 ─────────
+async function runVaStrTest(): Promise<Uint8Array> {
+  await init();
+  const doc = HwpDocument.createEmpty();
+  try {
+    doc.createBlankDocument();
+    const parsed = JSON.parse(
+      doc.createTableEx(JSON.stringify({ sectionIdx: 0, paraIdx: 0, charOffset: 0, rowCount: 3, colCount: 1, colWidths: [14000] }))
+    ) as { paraIdx: number; controlIdx: number };
+    const tPara = parsed.paraIdx; const tCtrl = parsed.controlIdx;
+    const vaStrs = ['top', 'center', 'bottom'];
+    for (let i = 0; i < 3; i++) {
+      const label = [`위 정렬 ("top")`, `가운데 정렬 ("center")`, `아래 정렬 ("bottom")`][i];
+      doc.insertTextInCell(0, tPara, tCtrl, i, 0, 0, label);
+      doc.setCellProperties(0, tPara, tCtrl, i, JSON.stringify({ height: 3000, verticalAlign: vaStrs[i] }));
+    }
+    return doc.exportHwp();
+  } finally { doc.free(); }
+}
+
+// ── Step B: 단위 상수 검증 (PX_TO_HWP=75, PT_TO_HWP=100) ────────────────────
+// 기댓값: 컬럼 폭 100px→7500HWPUNIT, 200px→15000HWPUNIT, 150px→11250HWPUNIT
+//        padding 5pt→500HWPUNIT (한컴에서 표/셀 속성 탭에서 실측)
+async function runUnitTest(): Promise<Uint8Array> {
+  await init();
+  const doc = HwpDocument.createEmpty();
+  try {
+    doc.createBlankDocument();
+    // 3열 2행: 헤더행 + 내용행
+    const colWidths = [100 * 75, 200 * 75, 150 * 75]; // [7500, 15000, 11250]
+    const parsed = JSON.parse(
+      doc.createTableEx(JSON.stringify({ sectionIdx: 0, paraIdx: 0, charOffset: 0, rowCount: 2, colCount: 3, colWidths }))
+    ) as { paraIdx: number; controlIdx: number };
+    const tPara = parsed.paraIdx; const tCtrl = parsed.controlIdx;
+    // 행 0: 컬럼 레이블
+    const headers = ['100px 열 (7500)', '200px 열 (15000)', '150px 열 (11250)'];
+    for (let c = 0; c < 3; c++) {
+      doc.insertTextInCell(0, tPara, tCtrl, c, 0, 0, headers[c]);
+    }
+    // 행 1: padding 5pt(=500) 사방 지정
+    const padding = 5 * 100; // 500
+    for (let c = 0; c < 3; c++) {
+      const cellIdx = 3 + c;
+      doc.insertTextInCell(0, tPara, tCtrl, cellIdx, 0, 0, `padding ${padding} HWPUNIT`);
+      doc.setCellProperties(0, tPara, tCtrl, cellIdx, JSON.stringify({
+        paddingLeft: padding, paddingRight: padding,
+        paddingTop: padding, paddingBottom: padding,
+      }));
+    }
+    return doc.exportHwp();
+  } finally { doc.free(); }
 }
 
 // ── 메인 페이지 ──────────────────────────────────────────────────────────
@@ -594,6 +869,18 @@ export default function RhwpCoreTestPage() {
   const [writeStatus, setWriteStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
   const [writeResult, setWriteResult] = useState<WriteTestResult | null>(null);
   const [writeError, setWriteError] = useState('');
+  const [tpStatus, setTpStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+  const [tpResult, setTpResult] = useState<TablePropsTestResult | null>(null);
+  const [tpError, setTpError] = useState('');
+
+  // Step A — verticalAlign 형식 확정
+  const [vaStatus, setVaStatus] = useState<'idle' | 'running' | 'error'>('idle');
+  const [vaError, setVaError] = useState('');
+
+  // Step B — 단위 상수 검증
+  const [unitStatus, setUnitStatus] = useState<'idle' | 'running' | 'error'>('idle');
+  const [unitError, setUnitError] = useState('');
+
   const autoLoadedRef = useRef(false);
 
   const runExploration = async (bytes: Uint8Array) => {
@@ -968,6 +1255,172 @@ export default function RhwpCoreTestPage() {
           </div>
         )}
 
+        {/* ── 표 속성 쓰기 조사 (Phase 4) ── */}
+        <div className="mt-8 mb-4">
+          <div className="flex items-center gap-3 mb-3">
+            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide">
+              표 속성 쓰기 API 조사 — Phase 4
+            </h2>
+            <button
+              onClick={async () => {
+                setTpStatus('running');
+                setTpResult(null);
+                setTpError('');
+                try {
+                  const r = await runTablePropsTest();
+                  setTpResult(r);
+                  setTpStatus('done');
+                } catch (e) {
+                  setTpError(String(e));
+                  setTpStatus('error');
+                }
+              }}
+              disabled={tpStatus === 'running'}
+              className="rounded-lg bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {tpStatus === 'running' ? '실행 중…' : '표 속성 조사 실행'}
+            </button>
+            {tpStatus === 'error' && <span className="text-xs text-red-500">{tpError}</span>}
+          </div>
+
+          {tpResult && (
+            <div className="rounded-lg bg-white border border-gray-200 p-4">
+              {/* 요약 */}
+              <div className="flex items-center gap-4 mb-4 flex-wrap">
+                <div className={`rounded px-3 py-1 text-sm font-bold ${tpResult.errors.length === 0 ? 'bg-green-100 text-green-800' : 'bg-yellow-50 text-yellow-800'}`}>
+                  {tpResult.errors.length === 0 ? '✅ 에러 없음' : `⚠️ 에러 ${tpResult.errors.length}건 (일부 미지원)`}
+                </div>
+                <div className="text-xs text-gray-500">{Math.round(tpResult.elapsedMs)}ms 소요</div>
+                {tpResult.exportedBytes && (
+                  <button
+                    onClick={() => downloadBytes(tpResult.exportedBytes!, 'table-props-test.hwp')}
+                    className="rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-700"
+                  >
+                    HWP 다운로드 — 한컴에서 색상·너비 확인 ({(tpResult.exportedBytes.length / 1024).toFixed(1)}KB)
+                  </button>
+                )}
+              </div>
+
+              {/* 단계별 결과 */}
+              <div className="overflow-x-auto">
+                <table className="border-collapse text-[10px] w-full mb-4">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-200 px-2 py-1 text-left w-6">#</th>
+                      <th className="border border-gray-200 px-2 py-1 text-left min-w-[200px]">API 호출</th>
+                      <th className="border border-gray-200 px-2 py-1 text-left">반환값</th>
+                      <th className="border border-gray-200 px-2 py-1 text-left">readBack (get)</th>
+                      <th className="border border-gray-200 px-2 py-1 w-10">판정</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tpResult.steps.map((s, i) => (
+                      <tr key={i} className={s.note ? 'bg-yellow-50' : s.ok ? '' : 'bg-red-50'}>
+                        <td className="border border-gray-200 px-2 py-0.5 text-gray-400">{i + 1}</td>
+                        <td className="border border-gray-200 px-2 py-0.5 font-mono text-gray-700 break-all">{s.name}</td>
+                        <td className="border border-gray-200 px-2 py-0.5 text-gray-500 max-w-[260px] break-all">{s.result}{s.note && <span className="block text-yellow-600 text-[9px] mt-0.5">{s.note}</span>}</td>
+                        <td className="border border-gray-200 px-2 py-0.5 text-gray-400 max-w-[260px] break-all text-[9px]">{s.readBack ?? '—'}</td>
+                        <td className="border border-gray-200 px-2 py-0.5 text-center">{s.ok ? '✅' : '❌'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* SVG 미리보기 */}
+              {tpResult.verifySvg && (
+                <details className="mb-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-gray-600 hover:text-gray-800">
+                    export → 재로드 렌더링 (page 0)
+                  </summary>
+                  <div className="mt-2 border border-gray-200 rounded bg-white overflow-hidden">
+                    <img
+                      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(tpResult.verifySvg)}`}
+                      alt="표 속성 테스트 미리보기"
+                      className="w-full"
+                      style={{ height: '400px', objectFit: 'contain', objectPosition: 'top' }}
+                    />
+                  </div>
+                </details>
+              )}
+
+              {/* 조사 결론 안내 */}
+              <div className="mt-3 rounded bg-blue-50 border border-blue-200 px-4 py-3 text-xs text-blue-800">
+                <div className="font-bold mb-1">판독 기준</div>
+                <ul className="list-disc list-inside space-y-0.5">
+                  <li><strong>readBack에 반영된 경우</strong> → API 지원 (HWP 보존 가능)</li>
+                  <li><strong>ok:true지만 readBack에 없는 경우</strong> → 무시됨 (화면 전용 처리 필요)</li>
+                  <li><strong>예외(throw) 발생</strong> → 필드명 형식 오류 또는 미지원</li>
+                  <li><strong>[fill추측] 항목은 HWP 파일을 한컴에서 직접 열어 색상 확인 필요</strong></li>
+                </ul>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Step A: 수직정렬 형식 확정 ── */}
+        <div className="mt-8 mb-4">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mr-1">
+              Step A — verticalAlign 형식 확정
+            </h2>
+            <button
+              onClick={async () => {
+                setVaStatus('running'); setVaError('');
+                try { downloadBytes(await runVaNumTest(), 'va-numeric-0-1-2.hwp'); setVaStatus('idle'); }
+                catch (e) { setVaError(String(e)); setVaStatus('error'); }
+              }}
+              disabled={vaStatus === 'running'}
+              className="rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700 disabled:opacity-50"
+            >
+              {vaStatus === 'running' ? '생성 중…' : '숫자(0/1/2) HWP 다운로드'}
+            </button>
+            <button
+              onClick={async () => {
+                setVaStatus('running'); setVaError('');
+                try { downloadBytes(await runVaStrTest(), 'va-string-top-center-bottom.hwp'); setVaStatus('idle'); }
+                catch (e) { setVaError(String(e)); setVaStatus('error'); }
+              }}
+              disabled={vaStatus === 'running'}
+              className="rounded-lg bg-fuchsia-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-fuchsia-700 disabled:opacity-50"
+            >
+              {vaStatus === 'running' ? '생성 중…' : '문자열("top"/"center"/"bottom") HWP 다운로드'}
+            </button>
+            {vaStatus === 'error' && <span className="text-xs text-red-500">{vaError}</span>}
+          </div>
+          <div className="rounded bg-violet-50 border border-violet-200 px-4 py-2 text-xs text-violet-800">
+            한컴에서 두 파일 열어 수직정렬 반영 여부 확인 → 작동한 형식을 bridge.ts <code>VA_MAP</code>에 반영.
+            둘 다 미작동 시 verticalAlign 기능 제거.
+          </div>
+        </div>
+
+        {/* ── Step B: 단위 상수 검증 ── */}
+        <div className="mt-6 mb-4">
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <h2 className="text-sm font-bold text-gray-700 uppercase tracking-wide mr-1">
+              Step B — 단위 상수 검증 (PX×75 / PT×100)
+            </h2>
+            <button
+              onClick={async () => {
+                setUnitStatus('running'); setUnitError('');
+                try { downloadBytes(await runUnitTest(), 'unit-constants-test.hwp'); setUnitStatus('idle'); }
+                catch (e) { setUnitError(String(e)); setUnitStatus('error'); }
+              }}
+              disabled={unitStatus === 'running'}
+              className="rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-teal-700 disabled:opacity-50"
+            >
+              {unitStatus === 'running' ? '생성 중…' : '단위 상수 테스트 HWP 다운로드'}
+            </button>
+            {unitStatus === 'error' && <span className="text-xs text-red-500">{unitError}</span>}
+          </div>
+          <div className="rounded bg-teal-50 border border-teal-200 px-4 py-2 text-xs text-teal-800 space-y-0.5">
+            <div>한컴 [표/셀 속성] 탭에서 실측:</div>
+            <div>• 열 1 너비 ≈ <strong>100px → 35.3mm</strong> | 열 2 ≈ <strong>200px → 70.6mm</strong> | 열 3 ≈ <strong>150px → 52.9mm</strong></div>
+            <div>• 셀 여백 ≈ <strong>5pt → 1.76mm</strong></div>
+            <div>비율 안 맞으면 실측값 보고 → 상수 재계산 후 수정.</div>
+          </div>
+        </div>
+
         {/* ── 쓰기 API 시험 (Step 4-A-1) ── */}
         <div className="mt-8 mb-4">
           <div className="flex items-center gap-3 mb-3">
@@ -1038,14 +1491,19 @@ export default function RhwpCoreTestPage() {
                 </tbody>
               </table>
 
-              {/* 재로드 검증 HTML 미리보기 */}
-              {writeResult.verifyHtml && (
+              {/* 재로드 검증 SVG 미리보기 (iframe 대신 img — cross-origin 스크립트 에러 방지) */}
+              {writeResult.verifySvg && (
                 <details className="mb-2">
                   <summary className="cursor-pointer text-xs font-semibold text-gray-600 hover:text-gray-800">
-                    export → 재로드 렌더링 미리보기 (page 0)
+                    export → 재로드 렌더링 미리보기 (page 0, SVG)
                   </summary>
-                  <div className="mt-2 border border-gray-200 rounded bg-white" style={{ transform: 'scale(0.5)', transformOrigin: 'top left', width: '200%', height: '400px', overflow: 'hidden' }}>
-                    <iframe srcDoc={writeResult.verifyHtml} className="w-full h-full border-none" title="write test output" />
+                  <div className="mt-2 border border-gray-200 rounded bg-white overflow-hidden">
+                    <img
+                      src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(writeResult.verifySvg)}`}
+                      alt="HWP 미리보기"
+                      className="w-full"
+                      style={{ height: '400px', objectFit: 'contain', objectPosition: 'top' }}
+                    />
                   </div>
                 </details>
               )}

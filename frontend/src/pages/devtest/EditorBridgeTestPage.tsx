@@ -37,7 +37,7 @@ interface BridgeResult {
   logs: BridgeLog[];
   errors: string[];
   hwpBytes: Uint8Array | null;
-  previewHtml: string | null;
+  previewSvg: string | null;
   elapsedMs: number;
 }
 
@@ -47,7 +47,7 @@ async function convertTiptapToHwp(json: JSONContent): Promise<BridgeResult> {
   const logs: BridgeLog[] = [];
   const errors: string[] = [];
   let hwpBytes: Uint8Array | null = null;
-  let previewHtml: string | null = null;
+  let previewSvg: string | null = null;
 
   const doc = HwpDocument.createEmpty();
 
@@ -84,6 +84,7 @@ async function convertTiptapToHwp(json: JSONContent): Promise<BridgeResult> {
         const { rowCount, colCount, cells } = parseTiptapTable(node);
         const r = doc.createTable(0, currentPara, 0, rowCount, colCount);
         const parsed = JSON.parse(r);
+        // createTable 반환값의 paraIdx가 실제 표 위치의 권위있는 소스 (단순 카운터 신뢰 X)
         const tableParaIdx: number = parsed.paraIdx ?? currentPara;
         const tableCtrlIdx: number = parsed.controlIdx ?? 0;
         logs.push({ action: `createTable(para=${currentPara}, ${rowCount}×${colCount})`, detail: r, ok: true });
@@ -101,13 +102,19 @@ async function convertTiptapToHwp(json: JSONContent): Promise<BridgeResult> {
           cellIdx++;
         }
 
-        // 표 다음 문단 추가
-        const paraCountAfterTable = doc.getParagraphCount(0);
-        currentPara = paraCountAfterTable;
+        // 표 다음 문단 확보: tableParaIdx를 권위 있는 위치로 사용해 재동기화
+        // splitParagraph로 표 문단 끝에 새 문단 추가
         try {
-          doc.splitParagraph(0, currentPara - 1, doc.getParagraphLength(0, currentPara - 1));
-          currentPara++;
-        } catch { /* 마지막 문단이면 skip */ }
+          const tableParaLen = doc.getParagraphLength(0, tableParaIdx);
+          const r3 = doc.splitParagraph(0, tableParaIdx, tableParaLen);
+          logs.push({ action: `splitParagraph(tableParaIdx=${tableParaIdx}, len=${tableParaLen}) → 표 뒤 문단 확보`, detail: r3, ok: true });
+          currentPara = tableParaIdx + 1;
+        } catch (e) {
+          // splitParagraph 실패 시 getParagraphCount로 폴백
+          const actualCount = doc.getParagraphCount(0);
+          logs.push({ action: `표 뒤 문단 확보 폴백 (getParagraphCount=${actualCount})`, detail: String(e), ok: false });
+          currentPara = actualCount;
+        }
       } else if (node.type === 'bulletList' || node.type === 'orderedList') {
         // 목록: 각 listItem을 별도 문단으로
         for (const item of node.content ?? []) {
@@ -137,12 +144,12 @@ async function convertTiptapToHwp(json: JSONContent): Promise<BridgeResult> {
     errors.push(String(e));
   }
 
-  // 재로드 검증
+  // 재로드 검증 (SVG 사용 — iframe srcDoc의 cross-origin 스크립트 문제 회피)
   if (hwpBytes) {
     try {
       const verifyDoc = new HwpDocument(hwpBytes);
       const pc = verifyDoc.pageCount();
-      previewHtml = verifyDoc.renderPageHtml(0);
+      previewSvg = verifyDoc.renderPageSvg(0);
       logs.push({ action: '재로드 검증', detail: `pageCount=${pc} ✅`, ok: true });
       verifyDoc.free();
     } catch (e) {
@@ -152,7 +159,7 @@ async function convertTiptapToHwp(json: JSONContent): Promise<BridgeResult> {
   }
 
   doc.free();
-  return { logs, errors, hwpBytes, previewHtml, elapsedMs: performance.now() - t0 };
+  return { logs, errors, hwpBytes, previewSvg, elapsedMs: performance.now() - t0 };
 }
 
 function extractText(node: JSONContent): string {
@@ -174,7 +181,7 @@ function parseTiptapTable(tableNode: JSONContent): { rowCount: number; colCount:
 }
 
 function downloadBytes(bytes: Uint8Array, filename: string) {
-  const blob = new Blob([bytes], { type: 'application/octet-stream' });
+  const blob = new Blob([bytes.slice()], { type: 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -275,12 +282,12 @@ export default function EditorBridgeTestPage() {
               )}
             </div>
             <div className="rounded-lg border border-gray-300 bg-white min-h-[300px] overflow-hidden">
-              {bridgeResult?.previewHtml ? (
-                <iframe
-                  srcDoc={bridgeResult.previewHtml}
+              {bridgeResult?.previewSvg ? (
+                <img
+                  src={`data:image/svg+xml;charset=utf-8,${encodeURIComponent(bridgeResult.previewSvg)}`}
+                  alt="HWP 미리보기"
                   className="w-full"
-                  style={{ height: '400px', border: 'none' }}
-                  title="hwp preview"
+                  style={{ height: '400px', objectFit: 'contain', objectPosition: 'top' }}
                 />
               ) : (
                 <div className="flex items-center justify-center h-72 text-gray-400 text-xs">
@@ -317,9 +324,9 @@ export default function EditorBridgeTestPage() {
 
         {/* GO/NO-GO 판정 섹션 */}
         {bridgeResult && (
-          <div className={`mt-6 rounded-lg p-4 border-2 ${bridgeResult.errors.length === 0 && bridgeResult.previewHtml ? 'border-green-400 bg-green-50' : 'border-red-300 bg-red-50'}`}>
+          <div className={`mt-6 rounded-lg p-4 border-2 ${bridgeResult.errors.length === 0 && bridgeResult.previewSvg ? 'border-green-400 bg-green-50' : 'border-red-300 bg-red-50'}`}>
             <h2 className="text-sm font-bold mb-2">
-              {bridgeResult.errors.length === 0 && bridgeResult.previewHtml
+              {bridgeResult.errors.length === 0 && bridgeResult.previewSvg
                 ? '✅ GO: Tiptap → rhwp/core → HWP 변환 성공'
                 : '❌ 막힌 부분 있음'}
             </h2>
@@ -328,7 +335,7 @@ export default function EditorBridgeTestPage() {
                 {bridgeResult.errors.map((e, i) => <li key={i}>• {e}</li>)}
               </ul>
             )}
-            {bridgeResult.errors.length === 0 && bridgeResult.previewHtml && (
+            {bridgeResult.errors.length === 0 && bridgeResult.previewSvg && (
               <p className="text-xs text-green-700">
                 텍스트 + 표가 포함된 HWP 생성 완료. 다운로드 후 한컴오피스에서 검증 필요.
               </p>
