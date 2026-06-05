@@ -131,7 +131,7 @@ public class ActivityPlanController {
 
         return ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + encodedFilename)
+                        "attachment; filename*=UTF-8''" + encodedFilename)
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .body(result.bytes());
     }

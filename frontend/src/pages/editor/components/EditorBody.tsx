@@ -6,7 +6,6 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
-import { Underline } from '@tiptap/extension-underline';
 import { TextAlign } from '@tiptap/extension-text-align';
 import { TaskList } from '@tiptap/extension-task-list';
 import { TaskItem } from '@tiptap/extension-task-item';
@@ -14,7 +13,6 @@ import { TextStyle, FontSize } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { Highlight } from '@tiptap/extension-highlight';
 import { FontFamily } from '@tiptap/extension-font-family';
-import { Link } from '@tiptap/extension-link';
 import type { Editor } from '@tiptap/react';
 import SlashMenu from '../../../components/editor/SlashMenu';
 import api from '../../../api/instance';
@@ -117,8 +115,9 @@ export default function EditorBody({ classroomId, onEditorReady }: Props) {
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
-      Underline,
+      StarterKit.configure({
+        link: { openOnClick: false },
+      }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TaskList,
       TaskItem.configure({ nested: true }),
@@ -131,7 +130,6 @@ export default function EditorBody({ classroomId, onEditorReady }: Props) {
       FontFamily,
       FontSize,
       Highlight.configure({ multicolor: true }),
-      Link.configure({ openOnClick: false }),
     ],
     content: '<p></p>',
   });

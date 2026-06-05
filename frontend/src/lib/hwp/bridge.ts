@@ -3,17 +3,15 @@
 //   applyCharFormat: {bold, italic, underline, strikethrough, textColor:"#RRGGBB", fontSize(HWPUNIT), fontId}
 //   applyParaFormat: {alignment:"left"|"center"|"right"|"justify", lineSpacing(퍼센트)}
 //   createTableEx: {sectionIdx, paraIdx, charOffset, rowCount, colCount, colWidths?:[u32,...]}
-//   setCellProperties: {paddingLeft?, paddingRight?, paddingTop?, paddingBottom?, height?, verticalAlign?}
+//   setCellProperties: {paddingLeft?, paddingRight?, paddingTop?, paddingBottom?, height?}
 //
-// 표 레이아웃 단위 (rhwp/core layout HWPUNIT = 1/7200 inch):
-//   1pt = 100 layout-HWPUNIT, 1px(96DPI) = 75 layout-HWPUNIT
-//   ※ 한컴 검증 후 비율 맞지 않으면 아래 두 상수 조정
-//   verticalAlign: 0=위, 1=가운데, 2=아래 (숫자 형식 시도)
+// 표 레이아웃 단위 (rhwp/core layout HWPUNIT):
+//   PX_TO_HWP_LAYOUT=60: 1px → 60 HWPUNIT (한컴 실측 보정, 2026-06-06)
+//   PT_TO_HWP_LAYOUT=80: 1pt → 80 HWPUNIT (한컴 실측 보정, 2026-06-06)
+//   verticalAlign: setCellProperties 미지원 확정 → 제거됨
 
-const PX_TO_HWP_LAYOUT = 75;   // Tiptap colwidth px → layout HWPUNIT
-const PT_TO_HWP_LAYOUT = 100;  // 셀 padding·height pt → layout HWPUNIT
-
-const VA_MAP: Record<string, number> = { top: 0, center: 1, bottom: 2 };
+const PX_TO_HWP_LAYOUT = 60;   // 한컴 실측 보정 (2026-06-06)
+const PT_TO_HWP_LAYOUT = 80;   // 한컴 실측 보정 (2026-06-06)
 
 import init, { HwpDocument } from '@rhwp/core';
 import type { JSONContent } from '@tiptap/react';
@@ -148,13 +146,6 @@ function applyCellProps(
   const h = ptToHwp(attrs.cellHeight);
   if (h != null) props.height = h;
 
-  // verticalAlign: 숫자 형식(0=위/1=가운데/2=아래) 시도
-  // 한컴 검증 후 작동 안 하면 string("top"/"center"/"bottom") 으로 교체
-  const va = attrs.cellVerticalAlign;
-  if (typeof va === 'string' && va in VA_MAP) {
-    props.verticalAlign = VA_MAP[va];
-  }
-
   if (Object.keys(props).length > 0) {
     try {
       doc.setCellProperties(sec, tableParaIdx, ctrlIdx, cellIdx, JSON.stringify(props));
@@ -243,13 +234,17 @@ export function writeJsonToDoc(json: JSONContent, doc: HwpDocument): void {
           const cw = (cell.attrs?.colwidth as number[] | null | undefined)?.[0];
           return typeof cw === 'number' && cw > 0 ? cw : 0;
         });
-        const allHaveWidth = colWidthsPx.every(w => w > 0);
+        const hasAnyWidth = colWidthsPx.some(w => w > 0);
 
         let tableParaIdx: number;
         let tableCtrlIdx: number;
 
-        if (allHaveWidth) {
-          const colWidthsHwp = colWidthsPx.map(px => Math.max(100, Math.round(px * PX_TO_HWP_LAYOUT)));
+        if (hasAnyWidth) {
+          // 0인 열은 지정된 너비들의 평균으로 보정 (Tiptap이 마지막 열 colwidth 누락 시 대비)
+          const specifiedWidths = colWidthsPx.filter(w => w > 0);
+          const avgPx = Math.round(specifiedWidths.reduce((a, b) => a + b, 0) / specifiedWidths.length);
+          const filledWidths = colWidthsPx.map(w => w > 0 ? w : avgPx);
+          const colWidthsHwp = filledWidths.map(px => Math.max(100, Math.round(px * PX_TO_HWP_LAYOUT)));
           const opts = JSON.stringify({
             sectionIdx: 0, paraIdx: currentPara, charOffset: 0,
             rowCount, colCount, colWidths: colWidthsHwp,
@@ -265,7 +260,7 @@ export function writeJsonToDoc(json: JSONContent, doc: HwpDocument): void {
             tableCtrlIdx = parsed.controlIdx ?? 0;
           }
         } else {
-          // colwidth 미지정 시 기존 createTable (균등 분할)
+          // colwidth 정보 전혀 없으면 균등 분할
           const parsed = JSON.parse(doc.createTable(0, currentPara, 0, rowCount, colCount)) as { paraIdx?: number; controlIdx?: number };
           tableParaIdx = parsed.paraIdx ?? currentPara;
           tableCtrlIdx = parsed.controlIdx ?? 0;
